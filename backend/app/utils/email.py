@@ -1,38 +1,28 @@
-import smtplib
-import os
+# pyrefly: ignore [missing-import]
+import resend
 import logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from app.config.settings import settings
 
 logger = logging.getLogger("VVResidencyAPI")
 
 HOTEL_NAME = "VV Residency"
-HOTEL_ADDRESS = "123 Grand Boulevard, Opp. Medical College, Chennai, Tamil Nadu \u2013 600001"
+HOTEL_ADDRESS = "123 Grand Boulevard, Opp. Medical College, Chennai, Tamil Nadu – 600001"
 HOTEL_PHONE = "73395 06878"
 HOTEL_GSTIN = "33AAHPB1964D1Z9"
 
 
 def send_booking_confirmation(booking: dict):
     """
-    Sends a booking confirmation email with a digital receipt to the guest.
-    Reads SMTP configuration from application settings.
+    Sends a booking confirmation email with a digital receipt to the guest using Resend API.
+    Reads RESEND_API_KEY from application settings.
     """
-    smtp_server   = (settings.SMTP_SERVER or "").strip()
-    smtp_port     = settings.SMTP_PORT
-    smtp_username = (settings.SMTP_USERNAME or "").strip()
-    smtp_password = (settings.SMTP_PASSWORD or "").strip()
-    sender_email  = (settings.SENDER_EMAIL or "").strip()
-
-    logger.info(f"SMTP_SERVER Loaded: {bool(smtp_server)}")
-    logger.info(f"SMTP_USERNAME Loaded: {bool(smtp_username)}")
-    logger.info(f"SMTP_PASSWORD Loaded: {bool(smtp_password)}")
-    logger.info(f"SENDER_EMAIL Loaded: {bool(sender_email)}")
-
-    if not all([smtp_server, smtp_username, smtp_password, sender_email]):
-        msg = "Email service is not configured on the server. Please set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, and SENDER_EMAIL environment variables."
+    api_key = (settings.RESEND_API_KEY or "").strip()
+    if not api_key:
+        msg = "Email service is not configured on the server. Please set RESEND_API_KEY environment variable."
         logger.warning(msg)
         raise ValueError(msg)
+
+    resend.api_key = api_key
 
     guest_email = booking.get("guest_email")
     if not guest_email:
@@ -51,11 +41,13 @@ def send_booking_confirmation(booking: dict):
     phone       = booking.get("guest_phone", "")
 
     bill_display = f"Bill No: {bill_number}" if bill_number else f"Booking ID: {booking_id}"
+    sender_email = (settings.SENDER_EMAIL or "").strip() or "onboarding@resend.dev"
+    if "<" not in sender_email and "@" in sender_email:
+        from_address = f"{HOTEL_NAME} <{sender_email}>"
+    else:
+        from_address = sender_email or "onboarding@resend.dev"
 
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"Booking Confirmation \u2014 {HOTEL_NAME} ({booking_id})"
-    msg['From'] = f"{HOTEL_NAME} <{sender_email}>"
-    msg['To'] = guest_email
+    subject = f"Booking Confirmation — {HOTEL_NAME} ({booking_id})"
 
     # ── Plain text ────────────────────────────────────────────────────
     text = f"""
@@ -68,7 +60,7 @@ Booking ID   : {booking_id}
 Room         : {room_id} — {room_name}
 Check-in     : {checkin}
 Check-out    : {checkout}
-Total Amount : \u20b9{amount:,.0f}
+Total Amount : ₹{amount:,.0f}
 
 {HOTEL_ADDRESS}
 Phone: {HOTEL_PHONE}
@@ -136,17 +128,17 @@ Best regards,
   </div>
   <div class="section">
     <div class="col col-left">
-      <div class="row"><span>Rent</span><b>\u20b9{amount:,.0f}</b></div>
-      <div class="row"><span>Phone Calls</span><b>\u2014</b></div>
-      <div class="row"><span>Sundries</span><b>\u2014</b></div>
-      <div class="row"><span>Service Charge</span><b>\u2014</b></div>
-      <div class="total"><span>Total :</span><span>\u20b9{amount:,.0f}</span></div>
+      <div class="row"><span>Rent</span><b>₹{amount:,.0f}</b></div>
+      <div class="row"><span>Phone Calls</span><b>—</b></div>
+      <div class="row"><span>Sundries</span><b>—</b></div>
+      <div class="row"><span>Service Charge</span><b>—</b></div>
+      <div class="total"><span>Total :</span><span>₹{amount:,.0f}</span></div>
     </div>
     <div class="col">
       <div class="row"><span>R. No.</span><b>{room_id}</b></div>
-      <div class="row"><span>Advance</span><b>\u2014</b></div>
+      <div class="row"><span>Advance</span><b>—</b></div>
       <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #9B1B30; display:flex; justify-content:space-between;">
-        <span>Bill Amount</span><strong>\u20b9{amount:,.0f}/-</strong>
+        <span>Bill Amount</span><strong>₹{amount:,.0f}/-</strong>
       </div>
     </div>
   </div>
@@ -163,7 +155,7 @@ Best regards,
   <div class="footer-row">
     <span class="thanks">Thank You. Come Again.</span>
     <span style="text-align:center; font-size:0.78rem;">
-      <span style="font-style:italic; font-size:1.1rem;">&#10003;</span><br>
+      <span style="font-style:italic; font-size:1.1rem;">✓</span><br>
       <span style="display:block; border-top:1.5px solid #9B1B30; width:120px; padding-top:2px;">For Manager</span>
     </span>
   </div>
@@ -172,42 +164,18 @@ Best regards,
 </html>
 """
 
-    part1 = MIMEText(text, 'plain')
-    part2 = MIMEText(html, 'html')
-    msg.attach(part1)
-    msg.attach(part2)
-
-   #server = smtplib.SMTP(smtp_server, smtp_port)
-    #server.starttls()
-    #server.login(smtp_username, smtp_password)
-    #server.sendmail(sender_email, guest_email, msg.as_string())
-    #server.quit()
-    #logger.info(f"Confirmation email sent to {guest_email} for booking {booking_id}")
-
     try:
-        port = int(smtp_port)
-        logger.info(f"Connecting to SMTP server {smtp_server}:{port}...")
-
-        if port == 465:
-            server = smtplib.SMTP_SSL(smtp_server, port, timeout=15)
-        else:
-            server = smtplib.SMTP(smtp_server, port, timeout=15)
-            logger.info("Starting TLS...")
-            server.starttls()
-
-        logger.info("Logging into SMTP...")
-        server.login(smtp_username, smtp_password)
-
-        logger.info("Sending email...")
-        server.sendmail(
-            sender_email,
-            guest_email,
-            msg.as_string()
-        )
-
-        server.quit()
-        logger.info("Email sent successfully")
-
+        logger.info(f"Sending booking confirmation email via Resend API to {guest_email}...")
+        params = {
+            "from": from_address,
+            "to": [guest_email],
+            "subject": subject,
+            "html": html,
+            "text": text,
+        }
+        response = resend.Emails.send(params)
+        logger.info(f"Email sent successfully via Resend. Response: {response}")
+        return response
     except Exception as e:
-        logger.exception(f"SMTP failed: {e}")
+        logger.exception(f"Resend API failed to send email: {e}")
         raise

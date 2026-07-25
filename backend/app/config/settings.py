@@ -27,12 +27,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Email / SMTP
-    SMTP_SERVER: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USERNAME: str = ""
-    SMTP_PASSWORD: str = ""
-    SENDER_EMAIL: str = ""
+    # Resend API & Email
+    RESEND_API_KEY: str = ""
+    SENDER_EMAIL: str = "onboarding@resend.dev"
 
     # Algorithm constant
     ALGORITHM: str = "HS256"
