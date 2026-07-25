@@ -1116,8 +1116,9 @@ function logout() {
 }
 
 function authHeaders() {
-  return authToken ? { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' }
-                   : { 'Content-Type': 'application/json' };
+  const token = authToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+  return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+               : { 'Content-Type': 'application/json' };
 }
 
 /* ---------- API HELPERS ---------- */
@@ -1131,7 +1132,7 @@ async function apiFetch(path, options = {}) {
     }
     return await res.json();
   } catch(e) {
-    if (e.name === 'TypeError') throw new Error('Cannot reach server. Make sure the backend is running on port 8000.');
+    if (e.name === 'TypeError') throw new Error('Cannot reach backend server. Please verify network connection or server status.');
     throw e;
   }
 }
@@ -1696,7 +1697,7 @@ function showReceipt(d) {
 
     <div class="receipt-actions">
       <button class="receipt-btn print" onclick="window.print()">🖨️ Print Receipt</button>
-      <button class="receipt-btn" style="background:#0f766e;color:white;" onclick="sendReceiptEmail('${d.bookingId}')">📧 Send Mail</button>
+      <button class="receipt-btn" style="background:#0f766e;color:white;" onclick="sendReceiptEmail(this, '${d.bookingId}')">📧 Send Mail</button>
       <button class="receipt-btn done" onclick="closeReceipt()">Done</button>
     </div>
   `;
@@ -1727,19 +1728,29 @@ async function closeReceipt() {
   showToast('🎉 Booking confirmed! Receipt closed.');
 }
 
-async function sendReceiptEmail(bookingId) {
-  const btn = event.target;
-  const originalText = btn.innerHTML;
-  btn.innerHTML = '⏳ Sending...';
-  btn.disabled = true;
+async function sendReceiptEmail(btnEl, bookingId) {
+  let btn = typeof btnEl === 'object' && btnEl ? (btnEl.target || btnEl) : null;
+  let id = typeof btnEl === 'string' ? btnEl : bookingId;
+
+  if (!btn && typeof event !== 'undefined' && event) {
+    btn = event.currentTarget || event.target;
+  }
+
+  const originalText = btn ? btn.innerHTML : '📧 Send Mail';
+  if (btn) {
+    btn.innerHTML = '⏳ Sending...';
+    btn.disabled = true;
+  }
   try {
-    const result = await apiFetch(`/bookings/${bookingId}/email`, { method: 'POST', headers: authHeaders() });
+    const result = await apiFetch(`/bookings/${id}/email`, { method: 'POST', headers: authHeaders() });
     showToast(`✅ ${result.message || 'Email sent successfully!'}`);
-    btn.innerHTML = '✅ Sent';
+    if (btn) btn.innerHTML = '✅ Sent';
   } catch(e) {
     showToast(`⚠️ ${e.message}`);
-    btn.innerHTML = originalText;
-    btn.disabled = false;
+    if (btn) {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
   }
 }
 

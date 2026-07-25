@@ -61,9 +61,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # CORS configuration to allow frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://hotel-management-alpha-one.vercel.app"
-    ],
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

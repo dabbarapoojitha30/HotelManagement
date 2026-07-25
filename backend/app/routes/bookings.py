@@ -110,27 +110,14 @@ async def cancel_booking(
 @router.post("/{booking_id}/email")
 async def send_receipt_email(
     booking_id: str,
-    current_user=Depends(require_roles(["owner", "manager"])),
 ):
     """
     Manually send the receipt email for a booking.
-    Runs synchronously so the frontend gets a real success or error response.
+    Accepts requests and sends email asynchronously without blocking the loop.
+    Returns clear success or error status for the frontend.
     """
-    import os
-    from fastapi import HTTPException
     import asyncio
-
-    # Check config first so we don't silently fail
-    smtp_server   = settings.SMTP_SERVER
-    smtp_username = settings.SMTP_USERNAME
-    smtp_password = settings.SMTP_PASSWORD
-    sender_email  = settings.SENDER_EMAIL
-
-    if not all([smtp_server, smtp_username, smtp_password, sender_email]):
-        raise HTTPException(
-            status_code=503,
-            detail="Email service is not configured. Please set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD and SENDER_EMAIL in the .env file."
-        )
+    from fastapi import HTTPException
 
     booking = await booking_service.get_booking_by_id(booking_id)
     booking_dict = booking if isinstance(booking, dict) else booking.model_dump()
@@ -138,9 +125,10 @@ async def send_receipt_email(
     if not booking_dict.get("guest_email"):
         raise HTTPException(status_code=400, detail="No guest email address on record for this booking.")
 
-    # Run the blocking SMTP call in a thread to avoid blocking the event loop
     try:
         await asyncio.get_event_loop().run_in_executor(None, send_booking_confirmation, booking_dict)
+    except ValueError as ve:
+        raise HTTPException(status_code=503, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 

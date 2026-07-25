@@ -18,11 +18,11 @@ def send_booking_confirmation(booking: dict):
     Sends a booking confirmation email with a digital receipt to the guest.
     Reads SMTP configuration from application settings.
     """
-    smtp_server = settings.SMTP_SERVER
-    smtp_port = settings.SMTP_PORT
-    smtp_username = settings.SMTP_USERNAME
-    smtp_password = settings.SMTP_PASSWORD
-    sender_email = settings.SENDER_EMAIL
+    smtp_server   = (settings.SMTP_SERVER or "").strip()
+    smtp_port     = settings.SMTP_PORT
+    smtp_username = (settings.SMTP_USERNAME or "").strip()
+    smtp_password = (settings.SMTP_PASSWORD or "").strip()
+    sender_email  = (settings.SENDER_EMAIL or "").strip()
 
     logger.info(f"SMTP_SERVER Loaded: {bool(smtp_server)}")
     logger.info(f"SMTP_USERNAME Loaded: {bool(smtp_username)}")
@@ -30,13 +30,15 @@ def send_booking_confirmation(booking: dict):
     logger.info(f"SENDER_EMAIL Loaded: {bool(sender_email)}")
 
     if not all([smtp_server, smtp_username, smtp_password, sender_email]):
-        logger.warning("Email configuration missing \u2014 skipping booking confirmation email.")
-        return
+        msg = "Email service is not configured on the server. Please set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, and SENDER_EMAIL environment variables."
+        logger.warning(msg)
+        raise ValueError(msg)
 
     guest_email = booking.get("guest_email")
     if not guest_email:
-        logger.error("Guest email missing from booking data.")
-        return
+        msg = "Guest email address is missing from booking data."
+        logger.error(msg)
+        raise ValueError(msg)
 
     guest_name  = booking.get("guest_name", "Guest")
     booking_id  = booking.get("booking_id", "Unknown")
@@ -183,12 +185,15 @@ Best regards,
     #logger.info(f"Confirmation email sent to {guest_email} for booking {booking_id}")
 
     try:
-        logger.info("Connecting to SMTP server...")
+        port = int(smtp_port)
+        logger.info(f"Connecting to SMTP server {smtp_server}:{port}...")
 
-        server = smtplib.SMTP(smtp_server, smtp_port)
-
-        logger.info("Starting TLS...")
-        server.starttls()
+        if port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, port, timeout=15)
+        else:
+            server = smtplib.SMTP(smtp_server, port, timeout=15)
+            logger.info("Starting TLS...")
+            server.starttls()
 
         logger.info("Logging into SMTP...")
         server.login(smtp_username, smtp_password)
@@ -201,7 +206,6 @@ Best regards,
         )
 
         server.quit()
-
         logger.info("Email sent successfully")
 
     except Exception as e:
