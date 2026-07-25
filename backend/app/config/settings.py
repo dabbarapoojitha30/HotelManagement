@@ -27,11 +27,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Email / Brevo SMTP
-    SMTP_SERVER:   str = "smtp-relay.brevo.com"
-    SMTP_PORT:     int = 587
-    SMTP_USERNAME: str = ""
-    SMTP_PASSWORD: str = ""
+    # Email — Brevo Transactional API
+    BREVO_API_KEY: str = ""
     SENDER_EMAIL:  str = ""
 
     # Algorithm constant

@@ -1,40 +1,36 @@
-import smtplib
+import requests
 import logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from app.config.settings import settings
 
 logger = logging.getLogger("VVResidencyAPI")
 
-HOTEL_NAME = "VV Residency"
+HOTEL_NAME    = "VV Residency"
 HOTEL_ADDRESS = "123 Grand Boulevard, Opp. Medical College, Chennai, Tamil Nadu – 600001"
-HOTEL_PHONE = "73395 06878"
-HOTEL_GSTIN = "33AAHPB1964D1Z9"
+HOTEL_PHONE   = "73395 06878"
+HOTEL_GSTIN   = "33AAHPB1964D1Z9"
+
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 def send_booking_confirmation(booking: dict):
     """
     Sends a booking confirmation email with a digital receipt to the guest.
-    Uses Brevo SMTP relay (smtp-relay.brevo.com, port 587, STARTTLS).
-    Reads configuration from application settings / environment variables.
+    Uses Brevo Transactional Email API (HTTPS POST — no SMTP, works on Render).
+    Reads BREVO_API_KEY and SENDER_EMAIL from application settings.
     """
-    smtp_server   = (settings.SMTP_SERVER   or "").strip()
-    smtp_username = (settings.SMTP_USERNAME or "").strip()
-    smtp_password = (settings.SMTP_PASSWORD or "").strip()
-    sender_email  = (settings.SENDER_EMAIL  or "").strip()
-    smtp_port     = settings.SMTP_PORT
+    api_key      = (settings.BREVO_API_KEY or "").strip()
+    sender_email = (settings.SENDER_EMAIL  or "").strip()
 
-    logger.info(f"SMTP_SERVER  Loaded: {bool(smtp_server)}")
-    logger.info(f"SMTP_USERNAME Loaded: {bool(smtp_username)}")
-    logger.info(f"SMTP_PASSWORD Loaded: {bool(smtp_password)}")
-    logger.info(f"SENDER_EMAIL  Loaded: {bool(sender_email)}")
+    logger.info(f"[EMAIL] BREVO_API_KEY Loaded: {bool(api_key)}")
+    logger.info(f"[EMAIL] SENDER_EMAIL  Loaded: {bool(sender_email)}")
 
-    if not all([smtp_server, smtp_username, smtp_password, sender_email]):
-        msg = (
-            "Email service is not configured on the server. "
-            "Please set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, "
-            "and SENDER_EMAIL environment variables."
-        )
+    if not api_key:
+        msg = "Email service is not configured: BREVO_API_KEY environment variable is missing."
+        logger.warning(msg)
+        raise ValueError(msg)
+
+    if not sender_email:
+        msg = "Email service is not configured: SENDER_EMAIL environment variable is missing."
         logger.warning(msg)
         raise ValueError(msg)
 
@@ -44,25 +40,20 @@ def send_booking_confirmation(booking: dict):
         logger.error(msg)
         raise ValueError(msg)
 
-    guest_name  = booking.get("guest_name", "Guest")
-    booking_id  = booking.get("booking_id", "Unknown")
+    guest_name  = booking.get("guest_name",  "Guest")
+    booking_id  = booking.get("booking_id",  "Unknown")
     bill_number = booking.get("bill_number", "")
-    room_id     = booking.get("room_id", "")
-    room_name   = booking.get("room_name", f"Room {room_id}")
-    checkin     = booking.get("checkin", "")
-    checkout    = booking.get("checkout", "")
-    amount      = booking.get("amount", 0)
+    room_id     = booking.get("room_id",     "")
+    room_name   = booking.get("room_name",   f"Room {room_id}")
+    checkin     = booking.get("checkin",     "")
+    checkout    = booking.get("checkout",    "")
+    amount      = booking.get("amount",      0)
 
     bill_display = f"Bill No: {bill_number}" if bill_number else f"Booking ID: {booking_id}"
-
-    # ── Build MIME message ────────────────────────────────────────────
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Booking Confirmation — {HOTEL_NAME} ({booking_id})"
-    msg["From"]    = f"{HOTEL_NAME} <{sender_email}>"
-    msg["To"]      = guest_email
+    subject      = f"Booking Confirmation — {HOTEL_NAME} ({booking_id})"
 
     # ── Plain text ────────────────────────────────────────────────────
-    text = f"""
+    text_content = f"""
 Dear {guest_name},
 
 Thank you for choosing {HOTEL_NAME}. Your booking is confirmed!
@@ -85,7 +76,7 @@ Best regards,
 """
 
     # ── HTML receipt ──────────────────────────────────────────────────
-    html = f"""
+    html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -176,24 +167,40 @@ Best regards,
 </html>
 """
 
-    msg.attach(MIMEText(text, "plain"))
-    msg.attach(MIMEText(html,  "html"))
+    # ── Call Brevo Transactional Email API ────────────────────────────
+    payload = {
+        "sender":      {"name": HOTEL_NAME, "email": sender_email},
+        "to":          [{"email": guest_email, "name": guest_name}],
+        "subject":     subject,
+        "htmlContent": html_content,
+        "textContent": text_content,
+    }
 
-    # ── Send via Brevo SMTP (STARTTLS on port 587) ────────────────────
+    headers = {
+        "accept":       "application/json",
+        "content-type": "application/json",
+        "api-key":      api_key,
+    }
+
+    logger.info(f"[EMAIL] Calling Brevo API for booking={booking_id}, to={guest_email}")
     try:
-        port = int(smtp_port)
-        logger.info(f"Connecting to Brevo SMTP {smtp_server}:{port}...")
-        server = smtplib.SMTP(smtp_server, port, timeout=20)
-        server.ehlo()
-        logger.info("Starting STARTTLS...")
-        server.starttls()
-        server.ehlo()
-        logger.info("Authenticating...")
-        server.login(smtp_username, smtp_password)
-        logger.info(f"Sending email to {guest_email}...")
-        server.sendmail(sender_email, guest_email, msg.as_string())
-        server.quit()
-        logger.info("Email sent successfully via Brevo SMTP.")
-    except Exception as e:
-        logger.exception(f"Brevo SMTP failed: {e}")
-        raise
+        response = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=15)
+        status_code = response.status_code
+        logger.info(f"[EMAIL] Brevo API response: HTTP {status_code} — {response.text[:200]}")
+
+        if status_code not in (200, 201):
+            error_body = response.text
+            logger.error(f"[EMAIL] Brevo API rejected the request: {error_body}")
+            raise RuntimeError(
+                f"Brevo API returned HTTP {status_code}: {error_body}"
+            )
+
+        logger.info(f"[EMAIL] Email sent successfully to {guest_email} via Brevo API.")
+        return response.json()
+
+    except requests.exceptions.Timeout:
+        logger.exception("[EMAIL] Brevo API request timed out after 15 s.")
+        raise RuntimeError("Brevo API request timed out. Please try again.")
+    except requests.exceptions.RequestException as e:
+        logger.exception(f"[EMAIL] Network error calling Brevo API: {e}")
+        raise RuntimeError(f"Network error sending email: {e}")

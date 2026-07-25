@@ -36,9 +36,7 @@ logger = logging.getLogger("VVResidencyAPI")
 async def lifespan(app: FastAPI):
     """Application lifespan — connect to DB and create indexes on startup."""
     # Startup
-    logger.info(f"SMTP_SERVER  Loaded: {bool(settings.SMTP_SERVER)}")
-    logger.info(f"SMTP_USERNAME Loaded: {bool(settings.SMTP_USERNAME)}")
-    logger.info(f"SMTP_PASSWORD Loaded: {bool(settings.SMTP_PASSWORD)}")
+    logger.info(f"BREVO_API_KEY Loaded: {bool(settings.BREVO_API_KEY)}")
     logger.info(f"SENDER_EMAIL  Loaded: {bool(settings.SENDER_EMAIL)}")
     await connect_to_mongo()
     await create_indexes()
