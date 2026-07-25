@@ -1,6 +1,7 @@
-# pyrefly: ignore [missing-import]
-import resend
+import smtplib
 import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from app.config.settings import settings
 
 logger = logging.getLogger("VVResidencyAPI")
@@ -13,16 +14,29 @@ HOTEL_GSTIN = "33AAHPB1964D1Z9"
 
 def send_booking_confirmation(booking: dict):
     """
-    Sends a booking confirmation email with a digital receipt to the guest using Resend API.
-    Reads RESEND_API_KEY from application settings.
+    Sends a booking confirmation email with a digital receipt to the guest.
+    Uses Brevo SMTP relay (smtp-relay.brevo.com, port 587, STARTTLS).
+    Reads configuration from application settings / environment variables.
     """
-    api_key = (settings.RESEND_API_KEY or "").strip()
-    if not api_key:
-        msg = "Email service is not configured on the server. Please set RESEND_API_KEY environment variable."
+    smtp_server   = (settings.SMTP_SERVER   or "").strip()
+    smtp_username = (settings.SMTP_USERNAME or "").strip()
+    smtp_password = (settings.SMTP_PASSWORD or "").strip()
+    sender_email  = (settings.SENDER_EMAIL  or "").strip()
+    smtp_port     = settings.SMTP_PORT
+
+    logger.info(f"SMTP_SERVER  Loaded: {bool(smtp_server)}")
+    logger.info(f"SMTP_USERNAME Loaded: {bool(smtp_username)}")
+    logger.info(f"SMTP_PASSWORD Loaded: {bool(smtp_password)}")
+    logger.info(f"SENDER_EMAIL  Loaded: {bool(sender_email)}")
+
+    if not all([smtp_server, smtp_username, smtp_password, sender_email]):
+        msg = (
+            "Email service is not configured on the server. "
+            "Please set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, "
+            "and SENDER_EMAIL environment variables."
+        )
         logger.warning(msg)
         raise ValueError(msg)
-
-    resend.api_key = api_key
 
     guest_email = booking.get("guest_email")
     if not guest_email:
@@ -38,16 +52,14 @@ def send_booking_confirmation(booking: dict):
     checkin     = booking.get("checkin", "")
     checkout    = booking.get("checkout", "")
     amount      = booking.get("amount", 0)
-    phone       = booking.get("guest_phone", "")
 
     bill_display = f"Bill No: {bill_number}" if bill_number else f"Booking ID: {booking_id}"
-    sender_email = (settings.SENDER_EMAIL or "").strip() or "onboarding@resend.dev"
-    if "<" not in sender_email and "@" in sender_email:
-        from_address = f"{HOTEL_NAME} <{sender_email}>"
-    else:
-        from_address = sender_email or "onboarding@resend.dev"
 
-    subject = f"Booking Confirmation — {HOTEL_NAME} ({booking_id})"
+    # ── Build MIME message ────────────────────────────────────────────
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Booking Confirmation — {HOTEL_NAME} ({booking_id})"
+    msg["From"]    = f"{HOTEL_NAME} <{sender_email}>"
+    msg["To"]      = guest_email
 
     # ── Plain text ────────────────────────────────────────────────────
     text = f"""
@@ -128,17 +140,17 @@ Best regards,
   </div>
   <div class="section">
     <div class="col col-left">
-      <div class="row"><span>Rent</span><b>₹{amount:,.0f}</b></div>
-      <div class="row"><span>Phone Calls</span><b>—</b></div>
-      <div class="row"><span>Sundries</span><b>—</b></div>
-      <div class="row"><span>Service Charge</span><b>—</b></div>
-      <div class="total"><span>Total :</span><span>₹{amount:,.0f}</span></div>
+      <div class="row"><span>Rent</span><b>&#8377;{amount:,.0f}</b></div>
+      <div class="row"><span>Phone Calls</span><b>&#8212;</b></div>
+      <div class="row"><span>Sundries</span><b>&#8212;</b></div>
+      <div class="row"><span>Service Charge</span><b>&#8212;</b></div>
+      <div class="total"><span>Total :</span><span>&#8377;{amount:,.0f}</span></div>
     </div>
     <div class="col">
       <div class="row"><span>R. No.</span><b>{room_id}</b></div>
-      <div class="row"><span>Advance</span><b>—</b></div>
+      <div class="row"><span>Advance</span><b>&#8212;</b></div>
       <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #9B1B30; display:flex; justify-content:space-between;">
-        <span>Bill Amount</span><strong>₹{amount:,.0f}/-</strong>
+        <span>Bill Amount</span><strong>&#8377;{amount:,.0f}/-</strong>
       </div>
     </div>
   </div>
@@ -155,7 +167,7 @@ Best regards,
   <div class="footer-row">
     <span class="thanks">Thank You. Come Again.</span>
     <span style="text-align:center; font-size:0.78rem;">
-      <span style="font-style:italic; font-size:1.1rem;">✓</span><br>
+      <span style="font-style:italic; font-size:1.1rem;">&#10003;</span><br>
       <span style="display:block; border-top:1.5px solid #9B1B30; width:120px; padding-top:2px;">For Manager</span>
     </span>
   </div>
@@ -164,18 +176,24 @@ Best regards,
 </html>
 """
 
+    msg.attach(MIMEText(text, "plain"))
+    msg.attach(MIMEText(html,  "html"))
+
+    # ── Send via Brevo SMTP (STARTTLS on port 587) ────────────────────
     try:
-        logger.info(f"Sending booking confirmation email via Resend API to {guest_email}...")
-        params = {
-            "from": from_address,
-            "to": [guest_email],
-            "subject": subject,
-            "html": html,
-            "text": text,
-        }
-        response = resend.Emails.send(params)
-        logger.info(f"Email sent successfully via Resend. Response: {response}")
-        return response
+        port = int(smtp_port)
+        logger.info(f"Connecting to Brevo SMTP {smtp_server}:{port}...")
+        server = smtplib.SMTP(smtp_server, port, timeout=20)
+        server.ehlo()
+        logger.info("Starting STARTTLS...")
+        server.starttls()
+        server.ehlo()
+        logger.info("Authenticating...")
+        server.login(smtp_username, smtp_password)
+        logger.info(f"Sending email to {guest_email}...")
+        server.sendmail(sender_email, guest_email, msg.as_string())
+        server.quit()
+        logger.info("Email sent successfully via Brevo SMTP.")
     except Exception as e:
-        logger.exception(f"Resend API failed to send email: {e}")
+        logger.exception(f"Brevo SMTP failed: {e}")
         raise

@@ -27,9 +27,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Resend API & Email
-    RESEND_API_KEY: str = ""
-    SENDER_EMAIL: str = "onboarding@resend.dev"
+    # Email / Brevo SMTP
+    SMTP_SERVER:   str = "smtp-relay.brevo.com"
+    SMTP_PORT:     int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SENDER_EMAIL:  str = ""
 
     # Algorithm constant
     ALGORITHM: str = "HS256"
