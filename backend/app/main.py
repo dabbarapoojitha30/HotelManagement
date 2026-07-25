@@ -62,7 +62,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "hotel-management-alpha-one.vercel.app"
+        "https://hotel-management-alpha-one.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
