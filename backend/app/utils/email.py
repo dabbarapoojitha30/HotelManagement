@@ -175,9 +175,35 @@ Best regards,
     msg.attach(part1)
     msg.attach(part2)
 
-    server = smtplib.SMTP(smtp_server, smtp_port)
-    server.starttls()
-    server.login(smtp_username, smtp_password)
-    server.sendmail(sender_email, guest_email, msg.as_string())
-    server.quit()
-    logger.info(f"Confirmation email sent to {guest_email} for booking {booking_id}")
+   #server = smtplib.SMTP(smtp_server, smtp_port)
+    #server.starttls()
+    #server.login(smtp_username, smtp_password)
+    #server.sendmail(sender_email, guest_email, msg.as_string())
+    #server.quit()
+    #logger.info(f"Confirmation email sent to {guest_email} for booking {booking_id}")
+
+    try:
+        logger.info("Connecting to SMTP server...")
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+
+        logger.info("Starting TLS...")
+        server.starttls()
+
+        logger.info("Logging into SMTP...")
+        server.login(smtp_username, smtp_password)
+
+        logger.info("Sending email...")
+        server.sendmail(
+            sender_email,
+            guest_email,
+            msg.as_string()
+        )
+
+        server.quit()
+
+        logger.info("Email sent successfully")
+
+    except Exception as e:
+        logger.exception(f"SMTP failed: {e}")
+        raise
