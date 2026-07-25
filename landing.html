@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VV Residency Hotel</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{ margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+body{
+    height:100vh;
+    background:
+    linear-gradient(rgba(0,0,0,0.5),rgba(0,0,0,0.5)),
+    url("https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1600");
+    background-size:cover;
+    background-position:center;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+.container{
+    text-align:center;
+    color:white;
+    background:rgba(255,255,255,0.1);
+    backdrop-filter:blur(12px);
+    padding:60px;
+    border-radius:20px;
+    width:520px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.3);
+}
+h1{ font-size:48px; margin-bottom:4px; letter-spacing:-1px; }
+h3{ color:#f4b400; margin-bottom:6px; font-size:13px; letter-spacing:3px; text-transform:uppercase; }
+.sub{ font-size:13px; color:rgba(255,255,255,0.65); margin-bottom:28px; }
+p{ font-size:17px; margin-bottom:30px; line-height:1.6; }
+.buttons{ display:flex; justify-content:center; gap:15px; }
+.btn{ padding:12px 30px; border:none; border-radius:30px; cursor:pointer; font-size:16px; font-weight:600; transition:0.3s; }
+.login{ background:#f4b400; color:white; }
+.signup{ background:white; color:#333; }
+.btn:hover{ transform:translateY(-3px); }
+.footer{ margin-top:25px; font-size:13px; opacity:0.7; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h3>WELCOME TO</h3>
+  <h1>VV Residency</h1>
+  <div class="sub">Your Home Away From Home</div>
+  <p>
+    Experience comfort and warm hospitality.<br>
+    Manage bookings, rooms and guests effortlessly<br>
+    with our Hotel Management System.
+  </p>
+  <div class="buttons">
+    <button class="btn login" onclick="location.href='login.html'">Login</button>
+    <button class="btn signup" onclick="location.href='signup.html'">Sign Up</button>
+  </div>
+  <div class="footer">Your Comfort, Our Priority</div>
+</div>
+</body>
+</html>
