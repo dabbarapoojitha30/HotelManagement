@@ -126,8 +126,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 ### 5. Verify
 
-- API Docs: http://localhost:8000/docs
-- Health Check: http://localhost:8000/health
+- API Docs: http://hotelmanagement-duem.onrender.com/docs
+- Health Check: http://hotelmanagement-duem.onrender.com/health
 - Frontend: Open `index.html` in a browser (or serve it)
 
 ## Default Credentials
