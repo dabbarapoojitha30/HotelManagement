@@ -58,16 +58,16 @@ app = FastAPI(
 # Request logging (added first so it wraps all other middleware)
 app.add_middleware(RequestLoggingMiddleware)
 
-# CORS configuration to allow frontend integration
+# CORS — allow_origin_regex guarantees CORS headers are present on ALL
+# responses (including 4xx/5xx), which allow_origins cannot do reliably.
+# Covers every Vercel preview URL and local development servers.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://hotel-management-1vyunqqei-dabbarapoojitha30s-projects.vercel.app",
-        "http://localhost:3000",
-    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Create uploads directory if it doesn't exist

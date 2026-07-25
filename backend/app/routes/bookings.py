@@ -113,23 +113,42 @@ async def send_receipt_email(
 ):
     """
     Manually send the receipt email for a booking.
-    Accepts requests and sends email asynchronously without blocking the loop.
-    Returns clear success or error status for the frontend.
+    Returns JSON success/error — never crashes without a CORS-safe response.
     """
     import asyncio
+    import logging
     from fastapi import HTTPException
 
-    booking = await booking_service.get_booking_by_id(booking_id)
-    booking_dict = booking if isinstance(booking, dict) else booking.model_dump()
+    log = logging.getLogger("VVResidencyAPI")
+    log.info(f"[EMAIL] Request received for booking_id={booking_id}")
 
-    if not booking_dict.get("guest_email"):
+    # ── Fetch booking ──────────────────────────────────────────────────
+    try:
+        booking = await booking_service.get_booking_by_id(booking_id)
+        booking_dict = booking if isinstance(booking, dict) else booking.model_dump()
+    except Exception as e:
+        log.exception(f"[EMAIL] Booking lookup failed for {booking_id}: {e}")
+        raise HTTPException(status_code=404, detail=f"Booking {booking_id} not found.")
+
+    guest_email = booking_dict.get("guest_email", "")
+    log.info(f"[EMAIL] guest_email={'<present>' if guest_email else '<MISSING>'}")
+
+    if not guest_email:
         raise HTTPException(status_code=400, detail="No guest email address on record for this booking.")
 
+    # ── Send email in thread (smtplib is blocking) ─────────────────────
+    log.info(f"[EMAIL] Dispatching send_booking_confirmation for {booking_id} → {guest_email}")
     try:
-        await asyncio.get_event_loop().run_in_executor(None, send_booking_confirmation, booking_dict)
+        await asyncio.get_event_loop().run_in_executor(
+            None, send_booking_confirmation, booking_dict
+        )
     except ValueError as ve:
+        log.warning(f"[EMAIL] Configuration error for {booking_id}: {ve}")
         raise HTTPException(status_code=503, detail=str(ve))
     except Exception as e:
+        log.exception(f"[EMAIL] SMTP send failed for {booking_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
-    return {"status": "success", "message": f"Email sent to {booking_dict['guest_email']}"}
+    log.info(f"[EMAIL] Successfully sent for booking_id={booking_id}")
+    return {"status": "success", "message": f"Email sent to {guest_email}"}
+
