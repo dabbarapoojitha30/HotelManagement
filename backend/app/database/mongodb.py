@@ -10,67 +10,93 @@ logger = logging.getLogger("VVResidencyDB")
 
 
 class Database:
-    """Singleton-style container for the Motor client and database handle."""
-    client: AsyncIOMotorClient = None
-    db = None
+    """
+    True Singleton container for the AsyncIOMotorClient and database handle.
+    Guarantees only one instance and connection pool exist across the entire runtime.
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.client: AsyncIOMotorClient = None
+            cls._instance.db = None
+        return cls._instance
+
+    @property
+    def is_connected(self) -> bool:
+        return self.client is not None and self.db is not None
 
 
 db_helper = Database()
 
 
 def get_database():
-    """Return the active database handle."""
+    """
+    Return the active singleton database handle.
+    Raises RuntimeError if accessed before connection is established.
+    """
+    if not db_helper.is_connected:
+        raise RuntimeError("Database is not connected. Call connect_to_mongo() first.")
     return db_helper.db
 
 
 async def connect_to_mongo():
     """
-    Establish connection to MongoDB with timeout configuration.
+    Establish or retrieve the singleton connection to MongoDB with timeout configuration.
+    Idempotent: If already connected, returns existing handle without recreating clients.
     Called during FastAPI lifespan startup.
     """
+    if db_helper.is_connected:
+        logger.debug("MongoDB client already connected (reusing singleton).")
+        return db_helper.db
+
     try:
         db_helper.client = AsyncIOMotorClient(
             settings.MONGODB_URL,
-            serverSelectionTimeoutMS=5000,   # Fail fast if server unreachable
-            connectTimeoutMS=5000,
-            socketTimeoutMS=10000,
+            serverSelectionTimeoutMS=10000,
+            connectTimeoutMS=20000,
+            socketTimeoutMS=30000,
+            maxPoolSize=50,
+            minPoolSize=0,
+            maxIdleTimeMS=45000,
         )
         db_helper.db = db_helper.client[settings.DATABASE_NAME]
         # Verify connectivity by pinging the server
         await db_helper.client.admin.command("ping")
-        logger.info(f"Connected to MongoDB: {settings.MONGODB_URL} -> {settings.DATABASE_NAME}")
+        logger.info(f"Connected to MongoDB (singleton): {settings.MONGODB_URL} -> {settings.DATABASE_NAME}")
+        return db_helper.db
     except Exception as e:
+        db_helper.client = None
+        db_helper.db = None
         logger.error(f"Failed to connect to MongoDB: {e}")
         raise
 
 
 async def close_mongo_connection():
-    """Close the MongoDB client connection. Called during FastAPI lifespan shutdown."""
+    """Close the MongoDB singleton connection and reset handles."""
     if db_helper.client:
         db_helper.client.close()
-        logger.info("Closed MongoDB connection.")
+        db_helper.client = None
+        db_helper.db = None
+        logger.info("Closed MongoDB singleton connection.")
 
 
 # ── Collection helpers ──────────────────────────────────────────────
 
 def get_user_collection():
-    """Return the 'users' collection handle."""
-    return db_helper.db["users"]
+    """Return the singleton 'users' collection handle."""
+    return get_database()["users"]
 
 
 def get_room_collection():
-    """Return the 'rooms' collection handle."""
-    return db_helper.db["rooms"]
+    """Return the singleton 'rooms' collection handle."""
+    return get_database()["rooms"]
 
 
 def get_booking_collection():
-    """Return the 'bookings' collection handle."""
-    return db_helper.db["bookings"]
-
-
-def get_counter_collection():
-    """Return the 'counters' collection handle (used for sequential bill numbers)."""
-    return db_helper.db["counters"]
+    """Return the singleton 'bookings' collection handle."""
+    return get_database()["bookings"]
 
 
 # ── Index creation ──────────────────────────────────────────────────
@@ -85,13 +111,6 @@ async def create_indexes():
         users_col = get_user_collection()
         rooms_col = get_room_collection()
         bookings_col = get_booking_collection()
-
-        # Users: drop legacy indexes if they exist (migration safety)
-        for old_idx in ("idx_users_email_unique", "idx_users_name_unique"):
-            try:
-                await users_col.drop_index(old_idx)
-            except Exception:
-                pass
 
         # Users: compound unique index on (name, role) so the same name can register
         # as both 'manager' and 'owner' but cannot register the same role twice.
@@ -110,6 +129,8 @@ async def create_indexes():
 
         # Bookings: unique index on booking_id (BK-XXXX)
         await bookings_col.create_index("booking_id", unique=True, name="idx_bookings_booking_id_unique")
+        # Unique sparse index on bill_seq for auto-incrementing bill numbers
+        await bookings_col.create_index("bill_seq", unique=True, sparse=True, name="idx_bookings_bill_seq_unique")
         # Non-unique indexes for common query patterns
         await bookings_col.create_index("room_id", name="idx_bookings_room_id")
         await bookings_col.create_index("status", name="idx_bookings_status")
@@ -120,15 +141,11 @@ async def create_indexes():
             name="idx_bookings_dates",
         )
 
-        # Counters: unique index on counter name
-        counters_col = get_counter_collection()
-        await counters_col.create_index("name", unique=True, name="idx_counters_name_unique")
-        # Seed bill_number counter if not present
-        await counters_col.update_one(
-            {"name": "bill_number"},
-            {"$setOnInsert": {"name": "bill_number", "seq": 0}},
-            upsert=True,
-        )
+        # Clean up legacy 'counters' collection if it exists
+        try:
+            await db_helper.db.drop_collection("counters")
+        except Exception:
+            pass
 
         logger.info("MongoDB indexes created successfully.")
     except Exception as e:

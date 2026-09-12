@@ -1,0 +1,33 @@
+# Version control and AI metadata
+.git
+.gitignore
+.agents
+.gemini
+AGENTS.md
+
+# Virtual environments and python cache
+.venv
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environment and sensitive secrets (NEVER bake into image)
+.env
+backend/.env
+*.env.local
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.live-server-ignore
+
+# Local uploads
+uploads/*
+!uploads/.gitkeep
+backend/uploads/*

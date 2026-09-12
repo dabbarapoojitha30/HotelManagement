@@ -2,42 +2,44 @@
 Application settings loaded from environment variables via pydantic-settings.
 JWT secrets have no safe defaults — the app will fail-fast if .env is missing.
 """
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
+# Single source of truth: backend/.env
+ENV_FILE_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+
 
 class Settings(BaseSettings):
-    # Server
-    PORT: int = 8000
-    HOST: str = "0.0.0.0"
 
-    # Database
-    MONGODB_URL: str = "mongodb://localhost:27017"
-    DATABASE_NAME: str = "vvresidency"
+    # Database — strictly loaded from .env
+    MONGODB_URL: str = Field(..., description="MongoDB Connection URL")
+    DATABASE_NAME: str = Field(..., description="MongoDB Database Name")
 
-    # JWT — no safe defaults; .env MUST provide these in production
-    JWT_SECRET: str = Field(
-        default="09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7",
-        description="Secret key for signing JWT access tokens",
-    )
-    JWT_REFRESH_SECRET: str = Field(
-        default="730dbf2cc81df98db1598e040f3532b2f6efba2a8c3d4dbb6b3de21c3b1e9c8f",
-        description="Secret key for signing JWT refresh tokens",
-    )
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    # JWT — strictly loaded from .env (no hardcoded fallback)
+    JWT_SECRET: str = Field(..., description="Secret key for signing JWT access tokens")
+    JWT_REFRESH_SECRET: str = Field(..., description="Secret key for signing JWT refresh tokens")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Email — Brevo Transactional API
-    BREVO_API_KEY: str = ""
-    SENDER_EMAIL:  str = ""
+    # Email — Gmail SMTP
+    GMAIL_APP_PASSWORD: str = ""
+    SENDER_EMAIL: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
 
-    # Algorithm constant
-    ALGORITHM: str = "HS256"
+    # Hotel Details — strictly loaded from .env (single source of truth)
+    HOTEL_NAME: str = Field(..., description="Hotel Name")
+    HOTEL_ADDRESS: str = Field(..., description="Hotel Address")
+    HOTEL_PHONE: str = Field(..., description="Hotel Contact Phone")
+    HOTEL_GSTIN: str = Field(..., description="Hotel GSTIN")
+
 
     class Config:
-        env_file = ".env"
+        env_file = str(ENV_FILE_PATH)
         env_file_encoding = "utf-8"
         extra = "ignore"
 
 
 settings = Settings()
+

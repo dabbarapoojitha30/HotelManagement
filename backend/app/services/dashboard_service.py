@@ -8,9 +8,12 @@ Returns data that exactly matches what the VV Residency frontend (index.html) ex
 """
 from typing import List, Dict, Any
 from datetime import datetime, timezone
+import logging
+
 from app.database import get_booking_collection, get_room_collection
 from app.schemas.booking import BookingDashboardResponse
-import logging
+from app.services.room_service import get_room_status
+from app.utils.timezone import get_ist_now, to_ist, format_ist_time_12hr
 
 logger = logging.getLogger("VVResidencyAPI")
 
@@ -29,21 +32,13 @@ def _format_amount_inr(amount: float) -> str:
     return f"₹{amount:,.0f}"
 
 
-def _format_time(dt: datetime) -> str:
-    """Format datetime as '7:40 PM'."""
-    try:
-        return dt.strftime("%-I:%M %p")  # Linux/Mac
-    except ValueError:
-        return dt.strftime("%I:%M %p").lstrip("0")
-
-
 async def get_dashboard_stats() -> dict:
     """
     Aggregate all dashboard statistics needed by the frontend:
     - room_counts: dict of status → count
     - total_rooms: total room count
     - occupancy: percentage occupied
-    - today_revenue: sum of amounts from bookings created today (INR)
+    - today_revenue: sum of amounts from bookings created today in IST (INR)
     - bookings_this_month: count of bookings this month
     - checkins: list of recent check-in activities
     - checkouts: list of recent check-out activities
@@ -53,7 +48,11 @@ async def get_dashboard_stats() -> dict:
     bookings_col = get_booking_collection()
     rooms_col = get_room_collection()
 
-    # ── Room counts (Dynamically derived using get_room_status) ──────
+    now_ist = get_ist_now()
+    today_str = now_ist.strftime("%Y-%m-%d")
+    today_start_ist = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # ── Room counts (Dynamically derived using get_room_status in IST) ──
     rooms_cursor = rooms_col.find({})
     rooms_list = []
     async for r in rooms_cursor:
@@ -64,10 +63,6 @@ async def get_dashboard_stats() -> dict:
     async for b in active_bookings_cursor:
         active_bookings.append(b)
 
-    from app.services.room_service import get_room_status
-    today = datetime.now().date()
-    today_str = today.strftime("%Y-%m-%d")
-
     total_rooms = len(rooms_list)
     avail_count = 0
     occupied_count = 0
@@ -75,7 +70,7 @@ async def get_dashboard_stats() -> dict:
     maint_count = 0
 
     for r in rooms_list:
-        status = get_room_status(r, active_bookings, today)
+        status = get_room_status(r, active_bookings, now_ist)
         if status == "avail":
             avail_count += 1
         elif status in ("occupied", "booked"):
@@ -95,9 +90,6 @@ async def get_dashboard_stats() -> dict:
     }
 
     # ── Revenue + booking aggregations ───────────────────────────────
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-
     status_to_class = {
         "pending":   "s-pending",
         "confirmed": "s-confirmed",
@@ -121,48 +113,32 @@ async def get_dashboard_stats() -> dict:
         guest_name = b.get("guest_name", "Guest")
         room_id = b.get("room_id", "")
 
-        # Today's revenue — confirmed/checkedin bookings created today
+        # Today's revenue — confirmed/checkedin bookings created today in IST
         if created_at and isinstance(created_at, datetime):
-            # Make timezone-aware for comparison
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            if created_at >= today_start and status in ("confirmed", "checkedin", "checkout"):
+            created_ist = to_ist(created_at)
+            if created_ist >= today_start_ist and status in ("confirmed", "checkedin", "checkout"):
                 today_revenue += amount
-            if created_at.year == now.year and created_at.month == now.month:
+            if created_ist.year == now_ist.year and created_ist.month == now_ist.month:
                 bookings_this_month += 1
 
-        # Build check-in / check-out activity lists
+        # Build check-in / check-out activity lists in IST
         time_str = ""
-        if created_at:
-            try:
-                if created_at.tzinfo is None:
-                    created_at = created_at.replace(tzinfo=timezone.utc)
-                local_dt = created_at.astimezone()
-                time_str = local_dt.strftime("%I:%M %p").lstrip("0") or local_dt.strftime("%I:%M %p")
-            except Exception:
-                time_str = ""
+        if created_at and isinstance(created_at, datetime):
+            time_str = format_ist_time_12hr(created_at)
 
         activity = {"guest": guest_name, "room": room_id, "time": time_str}
 
         if b.get("checkin") == today_str:
             checkins.append(activity)
 
-        # Show in checkouts if: status is 'checkout' AND was updated today
+        # Show in checkouts if: status is 'checkout' AND was updated today in IST
         if status == "checkout":
             updated_at = b.get("updated_at")
             if updated_at and isinstance(updated_at, datetime):
-                if updated_at.tzinfo is None:
-                    updated_at = updated_at.replace(tzinfo=timezone.utc)
-                if updated_at >= today_start:
-                    # Use updated_at time for display
-                    try:
-                        local_upd = updated_at.astimezone()
-                        upd_time_str = local_upd.strftime("%I:%M %p").lstrip("0") or local_upd.strftime("%I:%M %p")
-                    except Exception:
-                        upd_time_str = time_str
-                    checkouts.append({"guest": guest_name, "room": room_id, "time": upd_time_str})
+                updated_ist = to_ist(updated_at)
+                if updated_ist >= today_start_ist:
+                    checkouts.append({"guest": guest_name, "room": room_id, "time": format_ist_time_12hr(updated_ist)})
             elif b.get("checkout") == today_str:
-                # Fallback: if no updated_at, use scheduled date match
                 checkouts.append(activity)
 
         # Recent bookings for dashboard table

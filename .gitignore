@@ -9,7 +9,10 @@ venv/
 
 # Environment files
 .env
+*.env
+*.env.local
 backend/.env
+env.txt
 
 # Uploads
 uploads/
@@ -35,3 +38,8 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent & AI Tool files
+.agents/
+.gemini/
+AGENTS.md

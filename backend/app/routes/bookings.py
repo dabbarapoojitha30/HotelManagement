@@ -1,16 +1,22 @@
 """
 Booking routes — CRUD operations and status management.
 """
-from fastapi import APIRouter, Depends, Query, BackgroundTasks, UploadFile, File
 import os
 import shutil
 import uuid
+import asyncio
+import logging
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, Query, BackgroundTasks, UploadFile, File, HTTPException
+
 from app.schemas.booking import BookingCreate, BookingUpdateStatus, BookingResponse
 from app.auth.dependencies import require_roles
 from app.services import booking_service
 from app.config.settings import settings
 from app.utils.email import send_booking_confirmation
-from typing import List, Optional
+
+logger = logging.getLogger("VVResidencyAPI")
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -60,7 +66,6 @@ async def upload_aadhaar(file: UploadFile = File(...)):
     ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        from fastapi import HTTPException
         raise HTTPException(
             status_code=400,
             detail=f"Invalid file type '{ext}'. Allowed: PDF, JPG, JPEG, PNG"
@@ -71,6 +76,32 @@ async def upload_aadhaar(file: UploadFile = File(...)):
 
     # Generate unique filename preserving extension
     filename = f"aadhaar_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join("uploads", filename)
+
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return {"filepath": filepath.replace("\\", "/")}
+
+
+@router.post("/upload-photo", status_code=201)
+async def upload_photo(file: UploadFile = File(...)):
+    """Upload live captured guest photo (JPG/JPEG/PNG/WEBP) and return file path."""
+    ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if not ext:
+        ext = ".jpg"
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type '{ext}'. Allowed: JPG, JPEG, PNG, WEBP",
+        )
+
+    # Ensure uploads directory exists
+    os.makedirs("uploads", exist_ok=True)
+
+    # Generate unique filename
+    filename = f"photo_{uuid.uuid4().hex[:8]}{ext}"
     filepath = os.path.join("uploads", filename)
 
     with open(filepath, "wb") as buffer:
@@ -115,40 +146,35 @@ async def send_receipt_email(
     Manually send the receipt email for a booking.
     Returns JSON success/error — never crashes without a CORS-safe response.
     """
-    import asyncio
-    import logging
-    from fastapi import HTTPException
-
-    log = logging.getLogger("VVResidencyAPI")
-    log.info(f"[EMAIL] Request received for booking_id={booking_id}")
+    logger.info(f"[EMAIL] Request received for booking_id={booking_id}")
 
     # ── Fetch booking ──────────────────────────────────────────────────
     try:
         booking = await booking_service.get_booking_by_id(booking_id)
         booking_dict = booking if isinstance(booking, dict) else booking.model_dump()
     except Exception as e:
-        log.exception(f"[EMAIL] Booking lookup failed for {booking_id}: {e}")
+        logger.exception(f"[EMAIL] Booking lookup failed for {booking_id}: {e}")
         raise HTTPException(status_code=404, detail=f"Booking {booking_id} not found.")
 
     guest_email = booking_dict.get("guest_email", "")
-    log.info(f"[EMAIL] guest_email={'<present>' if guest_email else '<MISSING>'}")
+    logger.info(f"[EMAIL] guest_email={'<present>' if guest_email else '<MISSING>'}")
 
     if not guest_email:
         raise HTTPException(status_code=400, detail="No guest email address on record for this booking.")
 
-    # ── Send email in thread (smtplib is blocking) ─────────────────────
-    log.info(f"[EMAIL] Dispatching send_booking_confirmation for {booking_id} → {guest_email}")
+    # ── Send email in thread (Gmail SMTP is blocking) ──────────────────
+    logger.info(f"[EMAIL] Dispatching send_booking_confirmation for {booking_id} → {guest_email}")
     try:
         await asyncio.get_event_loop().run_in_executor(
             None, send_booking_confirmation, booking_dict
         )
     except ValueError as ve:
-        log.warning(f"[EMAIL] Configuration error for {booking_id}: {ve}")
+        logger.warning(f"[EMAIL] Configuration error for {booking_id}: {ve}")
         raise HTTPException(status_code=503, detail=str(ve))
     except Exception as e:
-        log.exception(f"[EMAIL] SMTP send failed for {booking_id}: {e}")
+        logger.exception(f"[EMAIL] Send email failed for {booking_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
-    log.info(f"[EMAIL] Successfully sent for booking_id={booking_id}")
+    logger.info(f"[EMAIL] Successfully sent for booking_id={booking_id}")
     return {"status": "success", "message": f"Email sent to {guest_email}"}
 

@@ -1,36 +1,39 @@
-import requests
 import logging
+import smtplib
+from email.header import Header
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
+
 from app.config.settings import settings
 
 logger = logging.getLogger("VVResidencyAPI")
 
-HOTEL_NAME    = "VV Residency"
-HOTEL_ADDRESS = "123 Grand Boulevard, Opp. Medical College, Chennai, Tamil Nadu – 600001"
-HOTEL_PHONE   = "73395 06878"
-HOTEL_GSTIN   = "33AAHPB1964D1Z9"
-
-BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+HOTEL_NAME = settings.HOTEL_NAME
+HOTEL_ADDRESS = settings.HOTEL_ADDRESS
+HOTEL_PHONE = settings.HOTEL_PHONE
+HOTEL_GSTIN = settings.HOTEL_GSTIN
 
 
 def send_booking_confirmation(booking: dict):
     """
     Sends a booking confirmation email with a digital receipt to the guest.
-    Uses Brevo Transactional Email API (HTTPS POST — no SMTP, works on Render).
-    Reads BREVO_API_KEY and SENDER_EMAIL from application settings.
+    Uses Gmail SMTP (STARTTLS on port 587) with Google App Password.
+    Reads SENDER_EMAIL and GMAIL_APP_PASSWORD from application settings.
     """
-    api_key      = (settings.BREVO_API_KEY or "").strip()
-    sender_email = (settings.SENDER_EMAIL  or "").strip()
+    app_password = (settings.GMAIL_APP_PASSWORD or "").strip().replace(" ", "")
+    sender_email = (settings.SENDER_EMAIL or "").strip()
 
-    logger.info(f"[EMAIL] BREVO_API_KEY Loaded: {bool(api_key)}")
-    logger.info(f"[EMAIL] SENDER_EMAIL  Loaded: {bool(sender_email)}")
-
-    if not api_key:
-        msg = "Email service is not configured: BREVO_API_KEY environment variable is missing."
-        logger.warning(msg)
-        raise ValueError(msg)
+    logger.info(f"[EMAIL] GMAIL_APP_PASSWORD Loaded: {bool(app_password)}")
+    logger.info(f"[EMAIL] SENDER_EMAIL       Loaded: {bool(sender_email)}")
 
     if not sender_email:
         msg = "Email service is not configured: SENDER_EMAIL environment variable is missing."
+        logger.warning(msg)
+        raise ValueError(msg)
+
+    if not app_password:
+        msg = "Email service is not configured: GMAIL_APP_PASSWORD environment variable is missing."
         logger.warning(msg)
         raise ValueError(msg)
 
@@ -46,11 +49,22 @@ def send_booking_confirmation(booking: dict):
     room_id     = booking.get("room_id",     "")
     room_name   = booking.get("room_name",   f"Room {room_id}")
     checkin     = booking.get("checkin",     "")
+    ci_time     = booking.get("checkin_time", "12:00") or "12:00"
     checkout    = booking.get("checkout",    "")
+    co_time     = booking.get("checkout_time", "11:00") or "11:00"
     amount      = booking.get("amount",      0)
 
     bill_display = f"Bill No: {bill_number}" if bill_number else f"Booking ID: {booking_id}"
     subject      = f"Booking Confirmation — {HOTEL_NAME} ({booking_id})"
+    words        = [w for w in HOTEL_NAME.strip().split() if w]
+    if not words:
+        hotel_initials = "HM"
+    elif words[0].isupper() and len(words[0]) <= 3:
+        hotel_initials = words[0]
+    elif len(words) >= 2:
+        hotel_initials = (words[0][0] + words[1][0]).upper()
+    else:
+        hotel_initials = words[0][:2].upper()
 
     # ── Plain text ────────────────────────────────────────────────────
     text_content = f"""
@@ -61,8 +75,8 @@ Thank you for choosing {HOTEL_NAME}. Your booking is confirmed!
 {bill_display}
 Booking ID   : {booking_id}
 Room         : {room_id} — {room_name}
-Check-in     : {checkin}
-Check-out    : {checkout}
+Check-in     : {checkin} at {ci_time}
+Check-out    : {checkout} at {co_time}
 Total Amount : ₹{amount:,.0f}
 
 {HOTEL_ADDRESS}
@@ -114,7 +128,7 @@ Best regards,
     <span style="text-align:right;">{bill_display}<br>Booking ID: {booking_id}</span>
   </div>
   <div class="header">
-    <div class="logo">VV</div>
+    <div class="logo">{hotel_initials}</div>
     <div class="brand">{HOTEL_NAME} <span>ROOMS</span></div>
   </div>
   <div class="addr">
@@ -125,9 +139,9 @@ Best regards,
     Name of the Customer Mr./Mrs./Ms. <strong>{guest_name}</strong>
   </p>
   <div style="font-size:0.84rem; margin-bottom:10px; display:grid; grid-template-columns:1.3fr 0.8fr 1.3fr; gap:6px;">
-    <div>Arrival Date : <strong>{checkin}</strong></div>
+    <div>Arrival Date : <strong>{checkin}</strong><br>Time : <strong>{ci_time}</strong></div>
     <div style="text-align:center;">Room No: <strong>{room_id}</strong></div>
-    <div style="text-align:right;">Departure Date : <strong>{checkout}</strong></div>
+    <div style="text-align:right;">Departure Date : <strong>{checkout}</strong><br>Time : <strong>{co_time}</strong></div>
   </div>
   <div class="section">
     <div class="col col-left">
@@ -147,7 +161,7 @@ Best regards,
   </div>
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:0.85rem;">
     <span>Balance :</span>
-    <span class="paid-tag">RECEIVED PAID</span>
+    <span class="paid-tag">PAID</span>
   </div>
   <div style="font-size:0.7rem; line-height:1.7; margin-bottom:14px;">
     1. Cheques are not accepted.<br>
@@ -167,40 +181,40 @@ Best regards,
 </html>
 """
 
-    # ── Call Brevo Transactional Email API ────────────────────────────
-    payload = {
-        "sender":      {"name": HOTEL_NAME, "email": sender_email},
-        "to":          [{"email": guest_email, "name": guest_name}],
-        "subject":     subject,
-        "htmlContent": html_content,
-        "textContent": text_content,
-    }
+    # ── Compose MIME multipart email ──────────────────────────────────
+    message = MIMEMultipart("alternative")
+    message["Subject"] = subject
+    message["From"] = formataddr((str(Header(HOTEL_NAME, "utf-8")), sender_email))
+    message["To"] = formataddr((str(Header(guest_name, "utf-8")), guest_email))
 
-    headers = {
-        "accept":       "application/json",
-        "content-type": "application/json",
-        "api-key":      api_key,
-    }
+    # Attach plain text and HTML alternative versions
+    part_text = MIMEText(text_content, "plain", "utf-8")
+    part_html = MIMEText(html_content, "html", "utf-8")
+    message.attach(part_text)
+    message.attach(part_html)
 
-    logger.info(f"[EMAIL] Calling Brevo API for booking={booking_id}, to={guest_email}")
+    # ── Send via Gmail SMTP ───────────────────────────────────────────
+    logger.info(
+        f"[EMAIL] Sending email via Gmail SMTP ({settings.SMTP_HOST}:{settings.SMTP_PORT}) "
+        f"for booking={booking_id}, to={guest_email}"
+    )
+
     try:
-        response = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=15)
-        status_code = response.status_code
-        logger.info(f"[EMAIL] Brevo API response: HTTP {status_code} — {response.text[:200]}")
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(sender_email, app_password)
+            server.sendmail(sender_email, [guest_email], message.as_string())
 
-        if status_code not in (200, 201):
-            error_body = response.text
-            logger.error(f"[EMAIL] Brevo API rejected the request: {error_body}")
-            raise RuntimeError(
-                f"Brevo API returned HTTP {status_code}: {error_body}"
-            )
+        logger.info(f"[EMAIL] Email sent successfully to {guest_email} via Gmail SMTP.")
+        return {"status": "success", "message": f"Email sent to {guest_email}"}
 
-        logger.info(f"[EMAIL] Email sent successfully to {guest_email} via Brevo API.")
-        return response.json()
-
-    except requests.exceptions.Timeout:
-        logger.exception("[EMAIL] Brevo API request timed out after 15 s.")
-        raise RuntimeError("Brevo API request timed out. Please try again.")
-    except requests.exceptions.RequestException as e:
-        logger.exception(f"[EMAIL] Network error calling Brevo API: {e}")
-        raise RuntimeError(f"Network error sending email: {e}")
+    except smtplib.SMTPAuthenticationError as auth_err:
+        logger.error(f"[EMAIL] Gmail SMTP authentication failed: {auth_err}")
+        raise RuntimeError(
+            "Gmail SMTP authentication failed. Please verify your SENDER_EMAIL and 16-character GMAIL_APP_PASSWORD in backend/.env."
+        ) from auth_err
+    except (smtplib.SMTPException, OSError) as smtp_err:
+        logger.exception(f"[EMAIL] Error sending email via Gmail SMTP: {smtp_err}")
+        raise RuntimeError(f"Failed to send email via Gmail SMTP: {smtp_err}") from smtp_err

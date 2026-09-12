@@ -57,6 +57,7 @@ backend/
 │   │   └── dashboard_service.py # Dashboard aggregation
 │   └── utils/
 │       ├── __init__.py
+│       ├── email.py             # Gmail SMTP transactional email sender
 │       └── security.py          # JWT + bcrypt utilities
 ├── requirements.txt
 ├── .env
@@ -124,21 +125,23 @@ uvicorn app.main:app --reload --port 8000
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-### 5. Verify
+### 5. Access the Application (Single-Server Setup)
 
-- API Docs: http://hotelmanagement-duem.onrender.com/docs
-- Health Check: http://hotelmanagement-duem.onrender.com/health
-- Frontend: Open `index.html` in a browser (or serve it)
+FastAPI serves both the frontend website and the REST APIs on the same port:
 
-## Default Credentials
+- **Web Application (Login Page)**: [http://localhost:8000/](http://localhost:8000/) (or `/login`)
+- **Manager Dashboard**: [http://localhost:8000/index.html](http://localhost:8000/index.html) (or `/booking`)
+- **Owner Dashboard**: [http://localhost:8000/owner.html](http://localhost:8000/owner.html) (or `/owner`)
+- **API Docs (Swagger UI)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
 
-The database is seeded with a default administrator on first run:
+## User Management & Roles
 
-| Email | Password | Role |
-|---|---|---|
-| admin@vvresidency.com | admin123 | admin |
+The system supports two dedicated roles:
+- **`owner`**: Full access to the owner dashboard (`/owner.html`), room management, reports, and staff user management.
+- **`manager`**: Operational access to front-desk booking dashboard (`/index.html`), guest check-ins/check-outs, and room statuses.
 
-> ⚠️ **Change these credentials in production!**
+New staff accounts are created exclusively by the Owner from the User Management panel in the Owner Dashboard (`/owner.html`).
 
 ## API Endpoints
 
@@ -146,10 +149,12 @@ The database is seeded with a default administrator on first run:
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | No | Register new staff user |
 | POST | `/api/auth/login` | No | Login, receive JWT tokens |
 | POST | `/api/auth/refresh` | No | Refresh access token |
 | GET | `/api/auth/me` | Yes | Get current user profile |
+| GET | `/api/auth/users` | Owner | List all staff users |
+| POST | `/api/auth/users` | Owner | Create new staff user |
+| DELETE | `/api/auth/users/{id}` | Owner | Delete a staff user |
 
 ### Rooms (`/api/rooms`)
 
@@ -184,10 +189,9 @@ The database is seeded with a default administrator on first run:
 ### `users`
 | Field | Type | Index |
 |---|---|---|
-| email | string | unique |
+| name | string | compound unique (`name`, `role`) |
+| role | string | compound unique (`name`, `role`) |
 | hashed_password | string | — |
-| role | string | — |
-| name | string | — |
 | created_at | datetime | — |
 
 ### `rooms`
@@ -206,6 +210,8 @@ The database is seeded with a default administrator on first run:
 | Field | Type | Index |
 |---|---|---|
 | booking_id | string | unique |
+| bill_number | string | — (e.g. "001") |
+| bill_seq | int | unique sparse (`idx_bookings_bill_seq_unique`) |
 | guest_name | string | — |
 | guest_email | string | index |
 | guest_phone | string | — |
@@ -223,7 +229,7 @@ The database is seeded with a default administrator on first run:
 - **Password Hashing**: bcrypt with auto-generated salt
 - **JWT Access Tokens**: 30-minute expiry (configurable)
 - **JWT Refresh Tokens**: 7-day expiry (configurable)
-- **RBAC**: `admin` and `staff` roles
+- **RBAC**: `owner` and `manager` roles
 - **CORS**: Configured for development (restrict in production)
 - **Input Validation**: Pydantic V2 with regex, min/max constraints
 - **Request Logging**: All requests logged with method, path, status, and duration

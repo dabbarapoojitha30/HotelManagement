@@ -1,11 +1,12 @@
 """
 Room routes — CRUD operations and availability search.
 """
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from app.schemas.room import RoomCreate, RoomUpdate, RoomStatusUpdate, RoomResponse
 from app.auth.dependencies import require_roles
 from app.services import room_service
-from typing import List, Optional
+from app.utils.timezone import get_ist_now
 
 router = APIRouter(prefix="/rooms", tags=["Rooms"])
 
@@ -14,20 +15,23 @@ router = APIRouter(prefix="/rooms", tags=["Rooms"])
 async def search_rooms(
     checkin: Optional[str] = Query(None, description="Check-in date YYYY-MM-DD"),
     checkout: Optional[str] = Query(None, description="Check-out date YYYY-MM-DD"),
+    checkin_time: Optional[str] = Query("12:00", description="Check-in time HH:MM"),
+    checkout_time: Optional[str] = Query("11:00", description="Check-out time HH:MM"),
     room_type: Optional[str] = Query(None, description="Room type: Standard, Deluxe, Suite"),
     guests: Optional[int] = Query(None, description="Number of guests"),
 ):
     """
-    Search available rooms by date range and type.
+    Search available rooms by date/time range and type in IST.
     Called by the frontend 'Search Rooms' button.
-    Returns only rooms with status='avail' that are not booked in the given date range.
+    Returns only rooms with status='avail' that are not booked in the given range.
     """
-    from datetime import datetime
-    await room_service.sync_room_statuses_and_bookings(datetime.now().date())
+    await room_service.sync_room_statuses_and_bookings(get_ist_now())
     return await room_service.search_available_rooms(
         checkin=checkin,
         checkout=checkout,
         room_type=room_type,
+        checkin_time=checkin_time,
+        checkout_time=checkout_time,
     )
 
 
@@ -39,16 +43,14 @@ async def get_rooms(
     Get all rooms with optional status/type filter.
     status_filter: 'all' | 'avail' | 'booked' | 'maint' | 'suite'
     """
-    from datetime import datetime
-    await room_service.sync_room_statuses_and_bookings(datetime.now().date())
+    await room_service.sync_room_statuses_and_bookings(get_ist_now())
     return await room_service.get_all_rooms(status_filter=status_filter)
 
 
 @router.get("/{room_id}", response_model=RoomResponse)
 async def get_room(room_id: str):
     """Get a single room by its room number/ID (e.g. '101')."""
-    from datetime import datetime
-    await room_service.sync_room_statuses_and_bookings(datetime.now().date())
+    await room_service.sync_room_statuses_and_bookings(get_ist_now())
     return await room_service.get_room_by_id(room_id)
 
 

@@ -3,8 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VV Residency — Owner Dashboard</title>
+<title>Owner Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="/config.js"></script>
+<script>
+  if (window.HOTEL_CONFIG && window.HOTEL_CONFIG.HOTEL_NAME) {
+    document.title = `${window.HOTEL_CONFIG.HOTEL_NAME} — Owner Dashboard`;
+  }
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -65,6 +71,26 @@
     transition: background 0.2s;
   }
   .nav-btn:hover { background: var(--gold-dark); color: var(--white); }
+  .profile-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.08);
+    color: var(--white);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .profile-nav-btn:hover {
+    background: rgba(232,168,56,0.15);
+    border-color: rgba(232,168,56,0.4);
+    color: var(--gold);
+  }
+  .profile-nav-btn .prof-icon { font-size: 1rem; }
 
   /* ===== DASHBOARD SECTION ===== */
   .dash-section { background: var(--navy); min-height: calc(100vh - 64px); padding: 3.5rem 2rem; }
@@ -373,8 +399,8 @@
     color: var(--gold-dark); background: var(--gold-light);
     border-radius: 4px; padding: 1px 6px; display: inline-block; margin-bottom: 4px;
   }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.25rem; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .form-group.full { grid-column: 1 / -1; }
   .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--slate); }
   .form-group input, .form-group select, .form-group textarea {
@@ -387,6 +413,7 @@
     outline: none;
     transition: border-color 0.2s;
     background: var(--surface);
+    box-sizing: border-box;
   }
   .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--teal); background: var(--white); }
   
@@ -644,8 +671,11 @@
 
 <!-- NAV -->
 <nav>
-  <div class="logo">VV <span>Residency</span></div>
+  <div class="logo" id="navBrandLogo"></div>
   <div class="nav-links">
+    <button class="profile-nav-btn" onclick="openProfileModal()" title="View & Edit Profile">
+      <span class="prof-icon">👤</span> <span id="navProfileName">Profile</span>
+    </button>
     <button class="nav-btn" onclick="logout()">Log Out</button>
   </div>
 </nav>
@@ -660,6 +690,9 @@
       </div>
       <div class="dash-top-actions">
         <button class="new-booking-btn" onclick="openBookingModal()">+ New Booking</button>
+        <button class="profile-nav-btn" onclick="openProfileModal()" style="padding: 12px 18px; border-radius: 10px; font-size: 0.85rem;" title="View & Edit Profile">
+          <span class="prof-icon">👤</span> <span id="dashProfileName">Profile</span>
+        </button>
         <button class="logout-btn" onclick="logout()">Log Out</button>
       </div>
     </div>
@@ -753,6 +786,30 @@
         </table>
       </div>
     </div>
+
+    <!-- Staff / User management -->
+    <div class="manage-rooms-card" style="margin-top: 2rem;">
+      <div class="manage-rooms-head">
+        <div>
+          <h3>Manage Staff & Users</h3>
+          <div style="color: #94A3B8; font-size: 0.78rem; margin-top: 2px;">System accounts for Managers and Owners</div>
+        </div>
+        <button class="add-room-btn" onclick="openUserFormModal()">+ Add New User</button>
+      </div>
+      <div class="mgmt-table-wrap">
+        <table class="mgmt-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Created Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="manageUsersTable"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -787,40 +844,116 @@
   </div>
 </div>
 
-<!-- BOOKING MODAL -->
-<div class="modal-overlay" id="bookingModal">
-  <div class="modal" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
-    <button class="modal-close" onclick="closeBookingModal()">✕</button>
-    <h2 style="font-family: 'Playfair Display', serif; font-size: 1.35rem; margin-bottom: 0.5rem; color: var(--navy);">🛎️ New Booking</h2>
-    <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Select a room and fill in the details below</p>
-    
-    <div style="margin-bottom:1.25rem;">
-      <label style="font-size:0.8rem; font-weight:600; color:var(--slate); display:block; margin-bottom:8px;">Select Room</label>
-      <div class="room-selector" id="roomSelector"></div>
+<!-- ADD USER MODAL -->
+<div class="modal-overlay" id="userFormModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeUserFormModal()">✕</button>
+    <h2 id="userFormTitle">Add New Staff User</h2>
+    <p>Enter staff credentials and access role</p>
+    <div class="room-form-field">
+      <label>Staff Name</label>
+      <input type="text" id="ufName" placeholder="e.g. Poojitha">
+    </div>
+    <div class="room-form-field">
+      <label>Role</label>
+      <select id="ufRole">
+        <option value="manager">Manager (Front Desk & Bookings)</option>
+        <option value="owner">Owner (Full Management)</option>
+      </select>
+    </div>
+    <div class="room-form-field">
+      <label>Password</label>
+      <input type="password" id="ufPassword" placeholder="Minimum 6 characters">
+    </div>
+    <button class="modal-confirm" onclick="saveUserForm()">Save User</button>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal" style="max-width: 440px;">
+    <button class="modal-close" onclick="closeProfileModal()">✕</button>
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:1rem;">
+      <div style="width:46px; height:46px; border-radius:50%; background:rgba(232,168,56,0.15); border:1.5px solid rgba(232,168,56,0.4); color:var(--gold); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">👤</div>
+      <div>
+        <h2 style="margin:0; font-size:1.3rem; color:var(--navy);">My Profile</h2>
+        <span id="profileRoleBadge" style="font-size:0.75rem; background:rgba(15,118,110,0.12); color:var(--teal); padding:2px 10px; border-radius:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">ROLE</span>
+      </div>
+    </div>
+    <p style="color:var(--muted); font-size:0.85rem; margin-bottom:1.25rem;">Update your account name and password credentials.</p>
+
+    <div style="margin-bottom:1rem;">
+      <label style="display:block; font-size:0.82rem; font-weight:600; margin-bottom:5px; color:var(--navy);">Display Name</label>
+      <input type="text" id="profName" style="width:100%; padding:10px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem; box-sizing:border-box;" placeholder="Your Name">
     </div>
 
-    <div class="form-grid">
-      <div class="form-group">
+    <div style="margin-bottom:1rem;">
+      <label style="display:block; font-size:0.82rem; font-weight:600; margin-bottom:5px; color:var(--navy);">Current Password <span style="color:#DC2626;">*</span></label>
+      <div style="position:relative;">
+        <input type="password" id="profCurrentPassword" style="width:100%; padding:10px 38px 10px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem; box-sizing:border-box;" placeholder="Enter current password">
+        <button type="button" onclick="togglePasswordVisibility('profCurrentPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem;">👁️</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <label style="display:block; font-size:0.82rem; font-weight:600; margin-bottom:5px; color:var(--navy);">New Password <span style="font-size:0.75rem; color:var(--muted); font-weight:400;">(leave blank to keep unchanged)</span></label>
+      <div style="position:relative;">
+        <input type="password" id="profNewPassword" style="width:100%; padding:10px 38px 10px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem; box-sizing:border-box;" placeholder="Minimum 6 characters">
+        <button type="button" onclick="togglePasswordVisibility('profNewPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem;">👁️</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.5rem;">
+      <label style="display:block; font-size:0.82rem; font-weight:600; margin-bottom:5px; color:var(--navy);">Confirm New Password</label>
+      <div style="position:relative;">
+        <input type="password" id="profConfirmPassword" style="width:100%; padding:10px 38px 10px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem; box-sizing:border-box;" placeholder="Re-type new password">
+        <button type="button" onclick="togglePasswordVisibility('profConfirmPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem;">👁️</button>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px;">
+      <button type="button" class="modal-confirm" id="btnSaveProfile" onclick="saveProfile()" style="flex:1;">Save Changes</button>
+      <button type="button" onclick="closeProfileModal()" style="padding:10px 16px; border:1.5px solid var(--border); background:#F8FAFC; border-radius:10px; cursor:pointer; font-size:0.9rem; font-weight:600; color:var(--navy);">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- BOOKING MODAL -->
+<div class="modal-overlay" id="bookingModal">
+  <div class="modal" style="max-width: 660px; width: 95%; max-height: 90vh; overflow-y: auto; overflow-x: hidden; padding: 1.75rem 2rem;">
+    <button class="modal-close" onclick="closeBookingModal()">✕</button>
+    <h2 style="font-family: 'Playfair Display', serif; font-size: 1.35rem; margin-bottom: 0.35rem; color: var(--navy);">🛎️ New Booking</h2>
+    <p style="color: var(--muted); font-size: 0.88rem; margin-bottom: 1.25rem;">Select a room and fill in the details below</p>
+    
+    <div class="form-group" style="margin-bottom:1.25rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <label for="roomSelect" style="font-size:0.82rem; font-weight:600; color:var(--slate); margin:0;">Select Room</label>
+        <span id="roomSelectedBadge" style="font-size:0.75rem; font-weight:700; color:var(--teal); background:var(--teal-light); padding:3px 10px; border-radius:12px; border:1px solid rgba(13,148,136,0.2);">—</span>
+      </div>
+      <div style="position:relative;">
+        <select id="roomSelect" onchange="handleRoomSelectChange(this.value)" style="width:100%; padding:11px 36px 11px 14px; border:1.5px solid var(--border); border-radius:10px; font-size:0.92rem; font-weight:600; color:var(--navy); background:var(--surface); cursor:pointer; outline:none; appearance:none; -webkit-appearance:none; transition:all 0.2s ease;">
+          <option value="">Choose an available room...</option>
+        </select>
+        <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); pointer-events:none; color:var(--muted); font-size:0.85rem;">▼</span>
+      </div>
+      <div id="roomSelector" style="display:none;"></div>
+    </div>
+
+    <div class="form-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.25rem;">
+      <div class="form-group" style="min-width:0;">
         <label>Name</label>
         <input type="text" id="fName" placeholder="Alexandra Morgan">
       </div>
-      <div class="form-group">
-        <label>Email Address</label>
-        <input type="email" id="fEmail" placeholder="alex@example.com">
-      </div>
-      <div class="form-group">
+      <div class="form-group" style="min-width:0;">
         <label>Phone Number</label>
         <input type="tel" id="fPhone" placeholder="+91 98765 43210">
       </div>
-      <div class="form-group">
-        <label>Check-in Date</label>
-        <input type="date" id="ci">
+      <div class="form-group" style="min-width:0;">
+        <label>Email Address <span style="font-weight:400; font-size:0.75rem; color:#94A3B8;">(Optional)</span></label>
+        <input type="email" id="fEmail" placeholder="alex@example.com (optional)">
       </div>
-      <div class="form-group">
-        <label>Check-out Date</label>
-        <input type="date" id="co">
-      </div>
-      <div class="form-group">
+      <div class="form-group" style="min-width:0;">
         <label>Guests</label>
         <select id="fGuests">
           <option>1 Guest</option>
@@ -829,16 +962,45 @@
           <option>4 Guests</option>
         </select>
       </div>
-      <div class="form-group">
+      <div class="form-group" style="min-width:0;">
+        <label>Check-in Date &amp; Time (IST)</label>
+        <div style="display:flex; gap:6px; min-width:0;">
+          <input type="date" id="ci" oninput="calcTotal()" style="flex:1.3; min-width:0; padding:10px 8px; font-size:0.85rem;">
+          <input type="time" id="ciTime" value="12:00" oninput="calcTotal()" style="flex:0.95; min-width:0; padding:10px 6px; font-size:0.85rem;" title="Check-in Time (IST)">
+        </div>
+      </div>
+      <div class="form-group" style="min-width:0;">
+        <label>Check-out Date &amp; Time (IST)</label>
+        <div style="display:flex; gap:6px; min-width:0;">
+          <input type="date" id="co" oninput="calcTotal()" style="flex:1.3; min-width:0; padding:10px 8px; font-size:0.85rem;">
+          <input type="time" id="coTime" value="11:00" oninput="calcTotal()" style="flex:0.95; min-width:0; padding:10px 6px; font-size:0.85rem;" title="Check-out Time (IST)">
+        </div>
+      </div>
+      <div class="form-group full" style="grid-column: 1 / -1; min-width:0;">
         <label>Special Requests</label>
         <input type="text" id="fNotes" placeholder="Late check-in, high floor...">
       </div>
 
-      <div class="form-group full">
+      <div class="form-group" style="min-width:0;">
+        <label>Guest Photo — Live Webcam Capture <span style="font-weight:400; font-size:0.75rem; color:#94A3B8;">(Optional)</span></label>
+        <div class="webcam-box" id="photoBox">
+          <video id="photoVideo" autoplay playsinline></video>
+          <canvas id="photoCanvas" style="display:none"></canvas>
+          <img id="photoPreviewImg" class="webcam-preview-img" src="" alt="Captured Guest Photo">
+          <div class="webcam-btns">
+            <button type="button" class="wcam-btn start" id="photoStartBtn" onclick="startPhotoWebcam()">📷 Open Camera</button>
+            <button type="button" class="wcam-btn capture" id="photoCaptureBtn" style="display:none" onclick="capturePhotoWebcam()">◯ Capture</button>
+            <button type="button" class="wcam-btn retake" id="photoRetakeBtn" style="display:none" onclick="retakePhotoWebcam()">↺ Retake</button>
+          </div>
+          <div class="wcam-status" id="photoStatus">Camera not started</div>
+        </div>
+      </div>
+
+      <div class="form-group" style="min-width:0;">
         <label>Aadhaar Card (ID Proof) — Webcam Capture</label>
         <div class="webcam-box" id="webcamBox">
           <video id="webcamVideo" autoplay playsinline></video>
-          <canvas id="webcamCanvas"></canvas>
+          <canvas id="webcamCanvas" style="display:none"></canvas>
           <img id="webcamPreviewImg" class="webcam-preview-img" src="" alt="Captured Aadhaar">
           <div class="webcam-btns">
             <button type="button" class="wcam-btn start" id="wcamStartBtn" onclick="startWebcam()">📷 Open Camera</button>
@@ -848,6 +1010,26 @@
           <div class="wcam-status" id="wcamStatus">Camera not started</div>
         </div>
       </div>
+    </div>
+
+    <!-- CUSTOM PRICE OPTION -->
+    <div class="custom-price-container" style="background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:12px; padding:1.1rem 1.35rem; margin-top:1.25rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+        <label for="fCustomAmountToggle" style="display:inline-flex; align-items:center; gap:0.6rem; cursor:pointer; font-weight:600; font-size:0.9rem; color:#1E293B; margin:0; user-select:none;">
+          <input type="checkbox" id="fCustomAmountToggle" onchange="toggleCustomPrice(this.checked)" style="width:17px; height:17px; accent-color:var(--teal); cursor:pointer;">
+          <span>Customize Total Price</span>
+        </label>
+        <span id="priceModeBadge" style="font-size:0.75rem; font-weight:700; padding:3px 9px; border-radius:12px; background:#E2E8F0; color:#475569; letter-spacing:0.3px;">Auto Calculated</span>
+      </div>
+      <div id="customAmountInputWrapper" style="display:flex; align-items:center; gap:0.6rem;">
+        <span style="font-weight:700; color:#64748B; font-size:1.15rem;">₹</span>
+        <input type="number" id="fCustomAmount" min="0" step="1" placeholder="Amount (e.g. 1500)" readonly
+          oninput="onCustomAmountInput()"
+          style="flex:1; padding:0.65rem 0.85rem; border:1.5px solid #CBD5E1; border-radius:8px; font-size:1.05rem; font-weight:700; color:#0F172A; background:#EDF2F7; transition:all 0.2s ease;">
+      </div>
+      <small id="customAmountHint" style="display:block; font-size:0.75rem; color:#64748B; margin-top:0.4rem; line-height:1.4;">
+        Defaults to room rate × nights. Check the box to manually customize the amount for this specific booking.
+      </small>
     </div>
 
     <div class="total-box">
@@ -876,7 +1058,23 @@
 </div>
 
 <script>
-const API_BASE = 'https://hotelmanagement-duem.onrender.com/api';
+const API_BASE = '/api';
+
+/* ---------- DYNAMIC HOTEL BRANDING (from .env via window.HOTEL_CONFIG) ---------- */
+function applyHotelBranding() {
+  const cfg = window.HOTEL_CONFIG || {};
+  if (cfg.HOTEL_NAME) {
+    document.title = `${cfg.HOTEL_NAME} — Owner Dashboard`;
+    const navLogo = document.getElementById('navBrandLogo');
+    if (navLogo) {
+      const initials = cfg.HOTEL_INITIALS || 'HM';
+      const restName = cfg.HOTEL_NAME.replace(new RegExp('^' + initials + '\\s*', 'i'), '').trim() || cfg.HOTEL_NAME;
+      navLogo.innerHTML = `${initials} <span>${restName}</span>`;
+    }
+  }
+}
+applyHotelBranding();
+document.addEventListener('DOMContentLoaded', applyHotelBranding);
 
 /* ---------- STATE ---------- */
 let rooms    = [];
@@ -889,6 +1087,8 @@ let editingRoomId     = null;
 let bookings = [];
 let selectedRoomId = null;
 let selectedRoomPrice = 0;
+let guestPhotoFile = null;
+let guestPhotoFilePath = null;
 let aadhaarFile = null;
 let aadhaarFilePath = null;
 let isReceiptOpen = false;
@@ -914,6 +1114,8 @@ function loadToken() {
     const role = localStorage.getItem('role') || null;
     if (!authToken || role !== 'owner') {
       window.location.href = 'login.html';
+    } else {
+      updateNavProfileDisplay();
     }
   } catch(e) {
     window.location.href = 'login.html';
@@ -930,16 +1132,215 @@ function logout() {
   window.location.href = 'login.html';
 }
 
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    btn.textContent = '👁️';
+  }
+}
+
+function updateNavProfileDisplay() {
+  const storedName = (localStorage.getItem('name') || '').trim();
+  const displayName = storedName || 'Profile';
+  const navEl = document.getElementById('navProfileName');
+  if (navEl) navEl.textContent = displayName;
+  const dashEl = document.getElementById('dashProfileName');
+  if (dashEl) dashEl.textContent = displayName;
+}
+
+function openProfileModal() {
+  const storedName = localStorage.getItem('name') || '';
+  const storedRole = localStorage.getItem('role') || 'owner';
+
+  const nameInput = document.getElementById('profName');
+  if (nameInput) nameInput.value = storedName;
+
+  const roleBadge = document.getElementById('profileRoleBadge');
+  if (roleBadge) roleBadge.textContent = storedRole.toUpperCase();
+
+  const curPass = document.getElementById('profCurrentPassword');
+  if (curPass) curPass.value = '';
+  const newPass = document.getElementById('profNewPassword');
+  if (newPass) newPass.value = '';
+  const confPass = document.getElementById('profConfirmPassword');
+  if (confPass) confPass.value = '';
+
+  const modal = document.getElementById('profileModal');
+  if (modal) modal.classList.add('open');
+}
+
+function closeProfileModal() {
+  const modal = document.getElementById('profileModal');
+  if (modal) modal.classList.remove('open');
+}
+
+async function saveProfile() {
+  const name = document.getElementById('profName').value.trim();
+  const currentPassword = document.getElementById('profCurrentPassword').value;
+  const newPassword = document.getElementById('profNewPassword').value;
+  const confirmPassword = document.getElementById('profConfirmPassword').value;
+
+  if (!name) {
+    showToast('⚠️ Display name cannot be empty');
+    document.getElementById('profName').focus();
+    return;
+  }
+  if (!currentPassword) {
+    showToast('⚠️ Please enter your current password to confirm changes');
+    document.getElementById('profCurrentPassword').focus();
+    return;
+  }
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      showToast('⚠️ New password must be at least 6 characters');
+      document.getElementById('profNewPassword').focus();
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('⚠️ New passwords do not match');
+      document.getElementById('profConfirmPassword').focus();
+      return;
+    }
+  }
+
+  const btn = document.getElementById('btnSaveProfile');
+  const origText = btn.textContent;
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  try {
+    const payload = {
+      name: name,
+      current_password: currentPassword,
+    };
+    if (newPassword) {
+      payload.new_password = newPassword;
+    }
+
+    const res = await apiFetch('/api/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+
+    if (res && res.access_token) {
+      authToken = res.access_token;
+      localStorage.setItem('token', res.access_token);
+      if (res.refresh_token) localStorage.setItem('refresh_token', res.refresh_token);
+      if (res.name) localStorage.setItem('name', res.name);
+      if (res.role) localStorage.setItem('role', res.role);
+
+      updateNavProfileDisplay();
+      showToast('✓ Profile updated successfully!');
+      closeProfileModal();
+    } else {
+      showToast(res.message || '✓ Profile updated successfully!');
+      closeProfileModal();
+    }
+  } catch (err) {
+    console.error('Failed to update profile:', err);
+    showToast(`⚠️ ${err.message || 'Failed to update profile'}`);
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+}
+
 function authHeaders() {
   const token = authToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
   return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
                : { 'Content-Type': 'application/json' };
 }
 
-/* ---------- API HELPERS ---------- */
+/* ---------- API HELPERS & SILENT TOKEN REFRESH ---------- */
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+function onTokenRefreshed(newToken) {
+  refreshSubscribers.forEach(cb => cb(newToken));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb) {
+  refreshSubscribers.push(cb);
+}
+
+async function doSilentTokenRefresh() {
+  const rToken = localStorage.getItem('refresh_token');
+  if (!rToken) return null;
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: rToken })
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (data && data.access_token) {
+      authToken = data.access_token;
+      localStorage.setItem('token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+      return data.access_token;
+    }
+  } catch(e) {
+    console.warn('Token silent refresh error:', e);
+  }
+  return null;
+}
+
 async function apiFetch(path, options = {}) {
   try {
-    const res = await fetch(`${API_BASE}${path}`, options);
+    let res = await fetch(`${API_BASE}${path}`, options);
+
+    // Silent refresh on 401 Unauthorized if refresh_token is available
+    if (res.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/refresh')) {
+      const rToken = localStorage.getItem('refresh_token');
+      if (rToken) {
+        if (!isRefreshing) {
+          isRefreshing = true;
+          const newToken = await doSilentTokenRefresh();
+          isRefreshing = false;
+          if (newToken) {
+            onTokenRefreshed(newToken);
+          } else {
+            logout();
+            throw new Error('Session expired. Please log in again.');
+          }
+        }
+
+        // Retry original request with new token
+        return new Promise((resolve, reject) => {
+          addRefreshSubscriber(async (newToken) => {
+            try {
+              const retryOpts = { ...options };
+              retryOpts.headers = {
+                ...(options.headers || {}),
+                'Authorization': `Bearer ${newToken}`,
+                'Content-Type': 'application/json'
+              };
+              const retryRes = await fetch(`${API_BASE}${path}`, retryOpts);
+              if (!retryRes.ok) {
+                let msg = `HTTP ${retryRes.status}`;
+                try { const j = await retryRes.json(); msg = j.detail || msg; } catch(e) {}
+                reject(new Error(msg));
+                return;
+              }
+              resolve(await retryRes.json());
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
+      }
+    }
+
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
       try { const j = await res.json(); msg = j.detail || msg; } catch(e) {}
@@ -1185,12 +1586,15 @@ function renderManageBookingsTable() {
       `;
     }
     const meta = bookingStatusMeta[b.status] || { label: b.status, cls: 'badge-occupied' };
+    const ciDisp = b.checkin_time ? `${b.checkin} <span style="color:#94A3B8;font-size:0.85em;">(${b.checkin_time})</span>` : b.checkin;
+    const coDisp = b.checkout_time ? `${b.checkout} <span style="color:#94A3B8;font-size:0.85em;">(${b.checkout_time})</span>` : b.checkout;
+    const photoThumb = b.photo_file ? `<img src="/${b.photo_file}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px;border:1px solid #9B1B30;" alt="Photo" title="Guest Photo">` : '';
     return `
     <tr>
       <td style="font-weight:600; color:#fff;">${b.bill_number || b.booking_id}</td>
-      <td>${b.guest_name}</td>
+      <td>${photoThumb}${b.guest_name}</td>
       <td><span class="room-badge badge-occupied" style="font-size: 1.1em; font-weight: bold; padding: 4px 8px;">Room ${b.room_id}</span></td>
-      <td>${b.checkin} to ${b.checkout}</td>
+      <td>${ciDisp} to ${coDisp}</td>
       <td>₹${Number(b.amount).toLocaleString('en-IN')}</td>
       <td>
         <span class="room-badge ${meta.cls}">${meta.label}</span>
@@ -1244,82 +1648,249 @@ function openBookingModal() {
 
 function closeBookingModal() {
   document.getElementById('bookingModal').classList.remove('open');
+  removePhoto();
   removeAadhaar();
+  const customToggle = document.getElementById('fCustomAmountToggle');
+  if (customToggle) {
+    customToggle.checked = false;
+    toggleCustomPrice(false);
+  }
   ['fName','fEmail','fPhone','ci','co','fNotes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const ciTime = document.getElementById('ciTime');
+  if (ciTime) ciTime.value = '12:00';
+  const coTime = document.getElementById('coTime');
+  if (coTime) coTime.value = '11:00';
   document.getElementById('nightsLabel').textContent = 'Select a room and dates to calculate total';
   document.getElementById('totalPrice').textContent = '—';
 }
 
 function renderRoomSelector() {
-  const sel = document.getElementById('roomSelector');
+  const roomSelect = document.getElementById('roomSelect');
   const bookable = rooms.filter(r => r.status === 'avail' || r.status === 'reserved');
 
+  if (!roomSelect) return;
+
   if (!bookable.length) {
-    sel.innerHTML = `<div style="color:var(--muted); font-size:0.85rem; padding:0.5rem; grid-column:1/-1;">
-      No rooms available for booking at the moment.
-    </div>`;
+    roomSelect.innerHTML = `<option value="">No rooms available for booking</option>`;
     selectedRoomId = null;
     selectedRoomPrice = 0;
+    const badge = document.getElementById('roomSelectedBadge');
+    if (badge) badge.textContent = 'No Rooms Available';
     return;
   }
 
-  sel.innerHTML = bookable.map((r, i) => {
-    const tagHtml = r.status === 'reserved' ? `<div class="ro-tag">Reserved</div>` : '';
-    return `
-    <div class="room-opt ${i === 0 ? 'selected' : ''}" data-room-id="${r.id}" onclick="selectRoom(this,'${r.id}',${r.price})">
-      ${tagHtml}
-      <div class="ro-no">${r.id}</div>
-      <div class="ro-floor">${r.floor || ''}</div>
-      <div class="ro-price">₹${Number(r.price).toLocaleString('en-IN')}/night</div>
-    </div>`;
+  roomSelect.innerHTML = bookable.map(r => {
+    const statusNote = r.status === 'reserved' ? ' (Reserved)' : '';
+    const floorNote = r.floor ? ` — ${r.floor}` : '';
+    return `<option value="${r.id}">Room ${r.id}${floorNote} · ₹${Number(r.price).toLocaleString('en-IN')}/night${statusNote}</option>`;
   }).join('');
 
-  selectedRoomId    = bookable[0].id;
-  selectedRoomPrice = bookable[0].price;
+  const targetRoom = (selectedRoomId && bookable.find(r => String(r.id) === String(selectedRoomId))) || bookable[0];
+  selectedRoomId    = targetRoom.id;
+  selectedRoomPrice = targetRoom.price;
+  roomSelect.value  = targetRoom.id;
+  updateRoomSelectedBadge(targetRoom);
   calcTotal();
 }
 
+function handleRoomSelectChange(roomId) {
+  const r = rooms.find(x => String(x.id) === String(roomId));
+  if (!r) return;
+  selectedRoomId    = r.id;
+  selectedRoomPrice = r.price;
+  updateRoomSelectedBadge(r);
+  calcTotal();
+}
+
+function updateRoomSelectedBadge(room) {
+  const badge = document.getElementById('roomSelectedBadge');
+  if (badge && room) {
+    const floor = room.floor ? `${room.floor} · ` : '';
+    badge.textContent = `Room ${room.id} (${floor}₹${Number(room.price).toLocaleString('en-IN')}/night)`;
+  }
+}
+
 function selectRoom(el, id, price) {
-  document.querySelectorAll('#roomSelector .room-opt').forEach(r => r.classList.remove('selected'));
-  el.classList.add('selected');
   selectedRoomId    = id;
   selectedRoomPrice = price;
+  const roomSelect  = document.getElementById('roomSelect');
+  if (roomSelect) roomSelect.value = id;
+  const r = rooms.find(x => String(x.id) === String(id));
+  if (r) updateRoomSelectedBadge(r);
   calcTotal();
 }
 
 function calcTotal() {
   const ci = document.getElementById('ci').value;
   const co = document.getElementById('co').value;
+  const ciTime = (document.getElementById('ciTime')?.value || '12:00').trim();
+  const coTime = (document.getElementById('coTime')?.value || '11:00').trim();
   if (!ci || !co) return;
-  const todayStr = new Date().toISOString().split('T')[0];
 
-  if (ci < todayStr) {
-    showToast('⚠️ Check-in date cannot be in the past');
-    document.getElementById('ci').value = '';
+  const ciDateTime = new Date(`${ci}T${ciTime}`);
+  const coDateTime = new Date(`${co}T${coTime}`);
+
+  if (coDateTime <= ciDateTime) {
+    showToast('⚠️ Check-out date and time must be after check-in date and time');
     document.getElementById('totalPrice').textContent = '—';
-    document.getElementById('nightsLabel').textContent = 'Select check-in date';
-    return;
-  }
-  if (co <= ci) {
-    showToast('⚠️ Check-out date must be after check-in date');
-    document.getElementById('co').value = '';
-    document.getElementById('totalPrice').textContent = '—';
-    document.getElementById('nightsLabel').textContent = 'Select check-out date';
+    document.getElementById('nightsLabel').textContent = 'Check-out must be after check-in';
+    const customInput = document.getElementById('fCustomAmount');
+    const isCustom = document.getElementById('fCustomAmountToggle')?.checked;
+    if (customInput && !isCustom) customInput.value = '';
     return;
   }
 
-  const nights = Math.round((new Date(co) - new Date(ci)) / 86400000);
-  if (nights <= 0) {
-    document.getElementById('nightsLabel').textContent = 'Invalid dates';
-    document.getElementById('totalPrice').textContent = '—';
-    return;
-  }
+  const nights = Math.max(1, Math.round((new Date(co) - new Date(ci)) / 86400000));
   const total = nights * selectedRoomPrice;
-  document.getElementById('nightsLabel').textContent = `${nights} night${nights > 1 ? 's' : ''} · Room ${selectedRoomId}`;
-  document.getElementById('totalPrice').textContent = `₹${total.toLocaleString('en-IN')}`;
+
+  const isCustom = document.getElementById('fCustomAmountToggle')?.checked;
+  const customInput = document.getElementById('fCustomAmount');
+
+  if (isCustom && customInput && customInput.value !== '') {
+    const customAmt = parseFloat(customInput.value) || 0;
+    document.getElementById('nightsLabel').textContent = `${nights} night${nights > 1 ? 's' : ''} · Room ${selectedRoomId} (Custom Rate)`;
+    document.getElementById('totalPrice').textContent = `₹${customAmt.toLocaleString('en-IN')}`;
+  } else {
+    if (customInput && !isCustom) {
+      customInput.value = total || '';
+    }
+    document.getElementById('nightsLabel').textContent = `${nights} night${nights > 1 ? 's' : ''} · Room ${selectedRoomId}`;
+    document.getElementById('totalPrice').textContent = `₹${total.toLocaleString('en-IN')}`;
+  }
+}
+
+/* ---------- PRICE CUSTOMIZATION ---------- */
+function toggleCustomPrice(enabled) {
+  const input = document.getElementById('fCustomAmount');
+  const badge = document.getElementById('priceModeBadge');
+  const hint = document.getElementById('customAmountHint');
+  if (!input || !badge) return;
+
+  if (enabled) {
+    input.readOnly = false;
+    input.style.background = '#FFFFFF';
+    input.style.borderColor = 'var(--teal)';
+    input.style.boxShadow = '0 0 0 3px rgba(13, 148, 136, 0.15)';
+    badge.textContent = 'Custom ✏️';
+    badge.style.background = '#CCFBF1';
+    badge.style.color = '#0F766E';
+    if (hint) hint.textContent = 'Custom price active. Enter any specific amount for this booking.';
+    input.focus();
+    input.select();
+  } else {
+    input.readOnly = true;
+    input.style.background = '#EDF2F7';
+    input.style.borderColor = '#CBD5E1';
+    input.style.boxShadow = 'none';
+    badge.textContent = 'Auto Calculated';
+    badge.style.background = '#E2E8F0';
+    badge.style.color = '#475569';
+    if (hint) hint.textContent = 'Defaults to room rate × nights. Check the box above to enter an adjusted or discounted price for this booking.';
+    calcTotal();
+  }
+}
+
+function onCustomAmountInput() {
+  const isCustom = document.getElementById('fCustomAmountToggle')?.checked;
+  if (!isCustom) return;
+
+  const input = document.getElementById('fCustomAmount');
+  const rawVal = input?.value?.trim();
+  if (!rawVal || isNaN(rawVal)) {
+    document.getElementById('totalPrice').textContent = '—';
+    return;
+  }
+  const amt = Math.max(0, parseFloat(rawVal));
+  document.getElementById('totalPrice').textContent = `₹${amt.toLocaleString('en-IN')}`;
+  const ci = document.getElementById('ci')?.value;
+  const co = document.getElementById('co')?.value;
+  let nightsText = '';
+  if (ci && co) {
+    const nights = Math.max(1, Math.round((new Date(co) - new Date(ci)) / 86400000));
+    nightsText = `${nights} night${nights > 1 ? 's' : ''} · `;
+  }
+  document.getElementById('nightsLabel').textContent = `${nightsText}Room ${selectedRoomId || '—'} (Custom Rate)`;
+}
+
+/* ---------- GUEST PHOTO WEBCAM CAPTURE ---------- */
+let photoStream = null;
+
+async function startPhotoWebcam() {
+  try {
+    photoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+    const video = document.getElementById('photoVideo');
+    video.srcObject = photoStream;
+    video.classList.add('active');
+    document.getElementById('photoStartBtn').style.display   = 'none';
+    document.getElementById('photoCaptureBtn').style.display = 'inline-block';
+    document.getElementById('photoStatus').textContent = 'Camera active — position guest and capture';
+  } catch(err) {
+    showToast('⚠️ Camera permission denied or unavailable');
+    document.getElementById('photoStatus').textContent = 'Camera unavailable: ' + err.message;
+  }
+}
+
+function capturePhotoWebcam() {
+  const video  = document.getElementById('photoVideo');
+  const canvas = document.getElementById('photoCanvas');
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  if (photoStream) {
+    photoStream.getTracks().forEach(t => t.stop());
+    photoStream = null;
+  }
+  video.classList.remove('active');
+  video.srcObject = null;
+
+  canvas.toBlob(blob => {
+    const file = new File([blob], 'guest_photo.jpg', { type: 'image/jpeg' });
+    const dataUrl = canvas.toDataURL('image/jpeg');
+    guestPhotoFile = { name: 'guest_photo.jpg', dataUrl, fileObj: file };
+
+    const preview = document.getElementById('photoPreviewImg');
+    preview.src = dataUrl;
+    preview.classList.add('show');
+    document.getElementById('photoCaptureBtn').style.display = 'none';
+    document.getElementById('photoRetakeBtn').style.display  = 'inline-block';
+    document.getElementById('photoStatus').textContent = '✅ Guest photo captured successfully';
+  }, 'image/jpeg', 0.92);
+}
+
+function retakePhotoWebcam() {
+  guestPhotoFile = null;
+  const preview = document.getElementById('photoPreviewImg');
+  preview.src = '';
+  preview.classList.remove('show');
+  document.getElementById('photoCaptureBtn').style.display = 'none';
+  document.getElementById('photoRetakeBtn').style.display  = 'none';
+  document.getElementById('photoStartBtn').style.display   = 'inline-block';
+  document.getElementById('photoStatus').textContent = 'Camera not started';
+}
+
+function removePhoto() {
+  guestPhotoFile     = null;
+  guestPhotoFilePath = null;
+  retakePhotoWebcam();
+}
+
+async function uploadPhotoToServer(fileObj) {
+  const formData = new FormData();
+  formData.append('file', fileObj);
+  const res = await fetch(`${API_BASE}/bookings/upload-photo`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.detail || `Photo upload failed (HTTP ${res.status})`);
+  }
+  const data = await res.json();
+  return data.filepath;
 }
 
 /* ---------- AADHAAR WEBCAM CAPTURE ---------- */
@@ -1383,7 +1954,6 @@ function removeAadhaar() {
   retakeWebcam();
 }
 
-
 async function uploadAadhaarToServer(fileObj) {
   const formData = new FormData();
   formData.append('file', fileObj);
@@ -1409,6 +1979,8 @@ function fmtTime(d) {
 async function submitBooking() {
   const ci = document.getElementById('ci').value;
   const co = document.getElementById('co').value;
+  const ciTime = (document.getElementById('ciTime')?.value || '12:00').trim();
+  const coTime = (document.getElementById('coTime')?.value || '11:00').trim();
 
   if (!ci || !co || document.getElementById('totalPrice').textContent === '—') {
     showToast('⚠️ Please select check-in and check-out dates');
@@ -1423,23 +1995,53 @@ async function submitBooking() {
     return;
   }
 
-  const fName  = document.getElementById('fName').value.trim()  || 'Guest';
-  const email  = document.getElementById('fEmail').value.trim() || 'guest@example.com';
-  const phone  = document.getElementById('fPhone').value.trim() || '0000000000';
+  const fName = document.getElementById('fName').value.trim();
+  if (!fName) {
+    showToast('⚠️ Please enter guest name');
+    document.getElementById('fName').focus();
+    return;
+  }
+  const phone = document.getElementById('fPhone').value.trim();
+  if (!phone) {
+    showToast('⚠️ Please enter guest phone number');
+    document.getElementById('fPhone').focus();
+    return;
+  }
+  const email = document.getElementById('fEmail').value.trim();
   const guestsVal = document.getElementById('fGuests').value || '2 Guests';
-  const notes  = document.getElementById('fNotes').value.trim()  || '';
+  const notes = document.getElementById('fNotes').value.trim() || '';
   const guestName = fName;
   const guestsCount = parseInt(guestsVal) || 2;
 
   const submitBtn = document.getElementById('confirmBookingBtn');
-  submitBtn.textContent = 'Uploading Aadhaar…';
+  submitBtn.textContent = 'Uploading Photos…';
   submitBtn.disabled = true;
 
   try {
-    let filepath = null;
+    let aadhaarPath = null;
+    let photoPath = null;
+
+    if (guestPhotoFile && guestPhotoFile.fileObj) {
+      photoPath = await uploadPhotoToServer(guestPhotoFile.fileObj);
+      guestPhotoFilePath = photoPath;
+    }
+
     if (aadhaarFile && aadhaarFile.fileObj) {
-      filepath = await uploadAadhaarToServer(aadhaarFile.fileObj);
-      aadhaarFilePath = filepath;
+      aadhaarPath = await uploadAadhaarToServer(aadhaarFile.fileObj);
+      aadhaarFilePath = aadhaarPath;
+    }
+
+    const isCustom = document.getElementById('fCustomAmountToggle')?.checked;
+    let customAmount = null;
+    if (isCustom) {
+      const val = parseFloat(document.getElementById('fCustomAmount')?.value);
+      if (isNaN(val) || val < 0) {
+        showToast('⚠️ Please enter a valid non-negative custom price');
+        submitBtn.textContent = 'Confirm Reservation →';
+        submitBtn.disabled = false;
+        return;
+      }
+      customAmount = val;
     }
 
     submitBtn.textContent = 'Confirming…';
@@ -1449,10 +2051,14 @@ async function submitBooking() {
       guest_phone:      phone,
       room_id:          selectedRoomId,
       checkin:          ci,
+      checkin_time:     ciTime,
       checkout:         co,
+      checkout_time:    coTime,
       guests_count:     guestsCount,
       special_requests: notes,
-      aadhaar_file:     filepath,
+      aadhaar_file:     aadhaarPath,
+      photo_file:       photoPath,
+      amount:           customAmount !== null ? customAmount : undefined,
     };
 
     const booking = await apiFetch('/bookings', {
@@ -1461,11 +2067,12 @@ async function submitBooking() {
       body: JSON.stringify(bookingPayload),
     });
 
-    const ciDate = new Date(ci);
-    const coDate = new Date(co);
-    const nights = Math.round((coDate - ciDate) / 86400000);
+    const ciDate = new Date(`${ci}T${ciTime}`);
+    const coDate = new Date(`${co}T${coTime}`);
+    const nights = Math.max(1, Math.round((coDate - ciDate) / 86400000));
     const room = rooms.find(r => r.id === selectedRoomId);
-    const aadhaarSnapshot = aadhaarFile; // snapshot before closeBookingModal clears it
+    const guestPhotoSnapshot = guestPhotoFile;
+    const aadhaarSnapshot = aadhaarFile;
 
     closeBookingModal();
     showReceipt({
@@ -1477,11 +2084,12 @@ async function submitBooking() {
       floor:         room ? (room.floor || '') : '',
       arrival:       fmtDate(ciDate),
       departure:     fmtDate(coDate),
-      arrivalTime:   fmtTime(new Date()),
-      departureTime: '—',
+      arrivalTime:   ciTime,
+      departureTime: coTime,
       nights,
       rate:          selectedRoomPrice,
       total:         booking.amount,
+      guestPhoto:    guestPhotoSnapshot,
       aadhaar:       aadhaarSnapshot,
     });
 
@@ -1499,9 +2107,16 @@ function showReceipt(d) {
   localStorage.setItem('pendingReceipt', JSON.stringify(d));
   const today  = fmtDate(new Date());
 
+  const cfg = window.HOTEL_CONFIG || {};
+  const hotelName = cfg.HOTEL_NAME || 'Hotel Management';
+  const hotelAddr = cfg.HOTEL_ADDRESS || '';
+  const hotelPhone = cfg.HOTEL_PHONE || '';
+  const hotelGstin = cfg.HOTEL_GSTIN || '';
+  const hotelInitials = cfg.HOTEL_INITIALS || 'HM';
+
   document.getElementById('receiptContent').innerHTML = `
     <div class="r-topline">
-      <div class="r-gstin-hand">GSTIN: 33AAECR4127Q6ZY</div>
+      <div class="r-gstin-hand">${hotelGstin ? 'GSTIN: ' + hotelGstin : ''}</div>
       <div class="r-bill-meta">
         Bill No. : <strong>${d.billNo}</strong><br>
         Booking ID : <strong>${d.bookingId || d.billNo}</strong><br>
@@ -1510,13 +2125,12 @@ function showReceipt(d) {
     </div>
 
     <div class="r-brand-row">
-      <div class="r-logo">VV</div>
-      <div class="r-brand-name">VV Residency <span>ROOMS</span></div>
+      <div class="r-logo">${hotelInitials}</div>
+      <div class="r-brand-name">${hotelName} <span>ROOMS</span></div>
     </div>
 
     <div class="r-addr">
-      Medical College 3rd Gate Opp., Medical College Road, Thanjavur – 613004<br>
-      📞 73395 06878 &nbsp;&nbsp; ☎ 04362-246616
+      ${hotelAddr}${hotelPhone ? '<br>📞 ' + hotelPhone : ''}
     </div>
 
     <div class="r-name-row">
@@ -1524,9 +2138,9 @@ function showReceipt(d) {
     </div>
 
     <div class="r-dates-row">
-      <div>Arrival Date : <b>${d.arrival}</b><br>Time : ${d.arrivalTime}</div>
+      <div>Arrival Date : <b>${d.arrival}</b><br>Time : <b>${d.arrivalTime || '12:00'} (IST)</b></div>
       <div>Room No: <b>${d.roomNo}</b><br>No. of Days: <b>${d.nights}</b></div>
-      <div>Departure Date : <b>${d.departure}</b><br>Time : ${d.departureTime}</div>
+      <div>Departure Date : <b>${d.departure}</b><br>Time : <b>${d.departureTime || '11:00'} (IST)</b></div>
     </div>
 
     <div class="r-main-grid">
@@ -1546,14 +2160,21 @@ function showReceipt(d) {
 
     <div class="r-balance-row">
       <span>Balance :</span>
-      <span class="r-balance-tag">RECEIVED PAID</span>
+      <span class="r-balance-tag">PAID</span>
     </div>
 
-    ${d.aadhaar ? `
-    <div class="r-aadhaar-row">
-      <img src="${d.aadhaar.dataUrl}" alt="Aadhaar">
-      <span>ID Proof verified — Aadhaar captured (${d.aadhaar.name})</span>
-    </div>` : ''}
+    <div style="display:flex; gap:16px; margin-bottom:14px; flex-wrap:wrap;">
+      ${d.guestPhoto ? `
+      <div class="r-aadhaar-row" style="margin-bottom:0;">
+        <img src="${d.guestPhoto.dataUrl || d.guestPhoto}" alt="Guest Photo" style="width:46px; height:46px; border-radius:50%; object-fit:cover; border:1.5px solid #9B1B30;">
+        <span>Guest Photo Verified (Captured)</span>
+      </div>` : ''}
+      ${d.aadhaar ? `
+      <div class="r-aadhaar-row" style="margin-bottom:0;">
+        <img src="${d.aadhaar.dataUrl || d.aadhaar}" alt="Aadhaar" style="width:56px; height:36px; object-fit:cover; border:1.5px solid #9B1B30; border-radius:3px;">
+        <span>ID Proof Verified (Aadhaar)</span>
+      </div>` : ''}
+    </div>
 
     <div class="r-terms">
       <div>1. Cheques are not accepted.</div>
@@ -1728,31 +2349,20 @@ function renderRoomCards() {
 }
 
 function openBookingModalForRoom(roomId) {
-  const r = rooms.find(x => x.id === roomId);
+  const r = rooms.find(x => String(x.id) === String(roomId));
   if (!r) return;
   document.getElementById('bookingModal').classList.add('open');
   initBookingDatePickers();
 
-  // Replace room selector with locked room info in owner modal
-  const selectorWrap = document.getElementById('roomSelector').parentElement;
-  selectorWrap.innerHTML = `
-    <div style="background:var(--teal-light); border:1.5px solid var(--teal); border-radius:10px; padding:10px 14px; font-size:0.88rem; font-weight:600; color:var(--teal); display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:12px;">
-      <span>🛒 Room ${r.id} — ${r.floor || ''} &nbsp;&nbsp; ₹${Number(r.price).toLocaleString('en-IN')}/night</span>
-      <span style="font-size:0.72rem; cursor:pointer; text-decoration:underline;" onclick="resetRoomSelector()">Change</span>
-    </div>`;
-  selectedRoomId    = r.id;
-  selectedRoomPrice = r.price;
-  calcTotal();
+  renderRoomSelector();
+  const roomSelect = document.getElementById('roomSelect');
+  if (roomSelect) {
+    roomSelect.value = r.id;
+  }
+  handleRoomSelectChange(r.id);
 }
 
 function resetRoomSelector() {
-  const modalBody = document.querySelector('#bookingModal .modal');
-  const labelAndSelector = modalBody.children[3]; // Fourth child element is room selector wrapper
-  labelAndSelector.outerHTML = `
-    <div style="margin-bottom:1.25rem;">
-      <label style="font-size:0.8rem; font-weight:600; color:var(--slate); display:block; margin-bottom:8px;">Select Room</label>
-      <div class="room-selector" id="roomSelector"></div>
-    </div>`;
   renderRoomSelector();
 }
 
@@ -1804,7 +2414,123 @@ async function refreshAllData() {
   await loadRooms();
   await loadDashboard();
   await loadBookings();
+  await loadUsers();
   renderRoomCards();
+}
+
+/* ---------- USER / STAFF MANAGEMENT ---------- */
+let staffUsers = [];
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function loadUsers() {
+  try {
+    staffUsers = await apiFetch('/auth/users', { headers: authHeaders() });
+    renderManageUsersTable();
+  } catch(e) {
+    console.error('Error loading users:', e);
+    staffUsers = [];
+    renderManageUsersTable();
+  }
+}
+
+function renderManageUsersTable() {
+  const tbody = document.getElementById('manageUsersTable');
+  if (!tbody) return;
+
+  if (!staffUsers.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#64748B; padding: 1.5rem;">No staff users found.</td></tr>';
+    return;
+  }
+
+  const currentLoggedInName = (localStorage.getItem('name') || '').trim().toLowerCase();
+  const currentLoggedInRole = (localStorage.getItem('role') || '').trim().toLowerCase();
+
+  tbody.innerHTML = staffUsers.map(u => {
+    const isCurrent = (u.name || '').trim().toLowerCase() === currentLoggedInName && (u.role || '').trim().toLowerCase() === currentLoggedInRole;
+    const roleBadge = u.role === 'owner'
+      ? '<span style="background: rgba(232,168,56,0.2); color: var(--gold); padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; text-transform: uppercase;">Owner</span>'
+      : '<span style="background: rgba(13,148,136,0.2); color: #2DD4BF; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; text-transform: uppercase;">Manager</span>';
+
+    const dateStr = u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+    const actionHtml = isCurrent
+      ? '<span style="font-size: 0.75rem; color: #94A3B8; font-style: italic;">(Current Session)</span>'
+      : `<button class="mgmt-icon-btn del" title="Delete User" onclick="deleteUser('${u.id}', '${escapeHtml(u.name)}')">✕</button>`;
+
+    return `
+      <tr>
+        <td><strong>${escapeHtml(u.name)}</strong></td>
+        <td>${roleBadge}</td>
+        <td>${dateStr}</td>
+        <td><div class="mgmt-actions">${actionHtml}</div></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openUserFormModal() {
+  document.getElementById('ufName').value = '';
+  document.getElementById('ufRole').value = 'manager';
+  document.getElementById('ufPassword').value = '';
+  document.getElementById('userFormModal').classList.add('open');
+}
+
+function closeUserFormModal() {
+  document.getElementById('userFormModal').classList.remove('open');
+}
+
+async function saveUserForm() {
+  const name = document.getElementById('ufName').value.trim();
+  const role = document.getElementById('ufRole').value;
+  const password = document.getElementById('ufPassword').value;
+
+  if (!name || !role || !password) {
+    showToast('⚠️ Please fill in all fields');
+    return;
+  }
+
+  if (password.length < 6) {
+    showToast('⚠️ Password must be at least 6 characters');
+    return;
+  }
+
+  try {
+    await apiFetch('/auth/users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+      },
+      body: JSON.stringify({ name, role, password }),
+    });
+
+    showToast(`✅ User "${name}" created successfully`);
+    closeUserFormModal();
+    await loadUsers();
+  } catch(e) {
+    showToast(`⚠️ ${e.message}`);
+  }
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Are you sure you want to delete user "${userName}"? This cannot be undone.`)) return;
+  try {
+    await apiFetch(`/auth/users/${userId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    showToast(`🗑️ User "${userName}" deleted`);
+    await loadUsers();
+  } catch(e) {
+    showToast(`⚠️ ${e.message}`);
+  }
 }
 
 /* ---------- MISC ---------- */
@@ -1821,6 +2547,7 @@ function showToast(msg) {
 }
 
 document.getElementById('roomFormModal').addEventListener('click', function(e) { if (e.target === this) closeRoomFormModal(); });
+document.getElementById('userFormModal').addEventListener('click', function(e) { if (e.target === this) closeUserFormModal(); });
 document.getElementById('bookingModal').addEventListener('click', function(e) { if (e.target === this) closeBookingModal(); });
 document.getElementById('receiptOverlay').addEventListener('click', function(e) { if (e.target === this) closeReceipt(); });
 

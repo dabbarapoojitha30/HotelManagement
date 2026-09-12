@@ -9,7 +9,6 @@ from app.database.mongodb import (
     get_user_collection,
     get_room_collection,
     get_booking_collection,
-    get_counter_collection,
     create_indexes,
 )
 
@@ -20,6 +19,5 @@ __all__ = [
     "get_user_collection",
     "get_room_collection",
     "get_booking_collection",
-    "get_counter_collection",
     "create_indexes",
 ]

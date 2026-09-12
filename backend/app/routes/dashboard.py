@@ -1,11 +1,15 @@
 """
 Dashboard routes — aggregated hotel statistics, room counts, and recent activity.
 """
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter
+from pydantic import BaseModel
+
 from app.schemas.booking import BookingDashboardResponse
 from app.services import dashboard_service
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from app.services.room_service import sync_room_statuses_and_bookings
+from app.utils.timezone import get_ist_now
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -49,8 +53,6 @@ async def get_dashboard_stats():
     - Recent check-in and check-out activity lists
     - Last 10 bookings formatted for the dashboard table
     """
-    from datetime import datetime
-    from app.services.room_service import sync_room_statuses_and_bookings
-    await sync_room_statuses_and_bookings(datetime.now().date())
+    await sync_room_statuses_and_bookings(get_ist_now())
     stats = await dashboard_service.get_dashboard_stats()
     return DashboardStats(**stats)

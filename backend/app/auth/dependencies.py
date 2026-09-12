@@ -55,7 +55,7 @@ def require_roles(allowed_roles: list):
     """
     FastAPI dependency factory — returns a dependency that ensures
     the authenticated user has one of the specified roles.
-    Usage: current_user = Depends(require_roles(["admin", "staff"]))
+    Usage: current_user = Depends(require_roles(["owner", "manager"]))
     """
     async def role_checker(user=Depends(get_current_user)):
         if user.get("role") not in allowed_roles:
